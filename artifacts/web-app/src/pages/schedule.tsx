@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfWeek, addDays, addWeeks, subWeeks, parseISO } from "date-fns";
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send, RotateCcw } from "lucide-react";
 import { apiCheckLeave } from "@/lib/platform-api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -39,7 +39,7 @@ function fmtTime(iso: string) {
 }
 
 function getShiftStatusClass(status: string) {
-  if (status === "published") return "bg-primary/15 border-primary/40 text-primary";
+  if (status === "published") return "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-400";
   if (status === "cancelled") return "bg-red-500/10 border-red-400/30 text-red-500 line-through";
   return "bg-muted border-border/70 text-foreground";
 }
@@ -58,6 +58,7 @@ export default function SchedulePage() {
   const [formValues, setFormValues] = useState({ startTime: "09:00", endTime: "17:00", workplaceId: "", role: "", notes: "" });
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reverting, setReverting] = useState(false);
 
   const { data: shifts = [] } = useListShifts({ query: { enabled: !!user?.companyId, queryKey: getListShiftsQueryKey() } });
   const { data: users = [] } = useListUsers({ query: { enabled: !!user?.companyId, queryKey: getListUsersQueryKey() } });
@@ -193,6 +194,23 @@ export default function SchedulePage() {
     });
   }
 
+  async function handleRevertToDraft() {
+    if (!modal.shift) return;
+    setReverting(true);
+    updateShift.mutate({ id: modal.shift.id, data: { status: "draft" } as any }, {
+      onSuccess: () => {
+        toast({ title: "Shift reverted to draft" });
+        qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+        setModal(m => ({ ...m, open: false }));
+        setReverting(false);
+      },
+      onError: () => {
+        toast({ title: "Failed to revert", variant: "destructive" });
+        setReverting(false);
+      }
+    });
+  }
+
   async function publishAll() {
     const draftShifts = shifts.filter(s => s.status === "draft");
     if (!draftShifts.length) {
@@ -258,7 +276,7 @@ export default function SchedulePage() {
           { color: "bg-emerald-500/20 border border-emerald-500/30", label: "Available" },
           { color: "bg-amber-500/20 border border-amber-500/30", label: "Pending leave" },
           { color: "bg-red-500/20 border border-red-500/30", label: "Approved leave" },
-          { color: "bg-primary/20 border border-primary/30", label: "Published" },
+          { color: "bg-emerald-500/20 border border-emerald-500/40", label: "Published" },
           { color: "bg-muted border border-border", label: "Draft" },
         ].map(({ color, label }) => (
           <span key={label} className="flex items-center gap-1.5">
@@ -479,6 +497,12 @@ export default function SchedulePage() {
               <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting} className="sm:mr-auto">
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
                 {deleting ? "Deleting..." : "Delete"}
+              </Button>
+            )}
+            {modal.mode === "edit" && modal.shift?.status === "published" && isManager && (
+              <Button variant="outline" size="sm" onClick={handleRevertToDraft} disabled={reverting} className="gap-1.5 text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20">
+                <RotateCcw className="w-3.5 h-3.5" />
+                {reverting ? "Reverting..." : "Revert to Draft"}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => setModal(m => ({ ...m, open: false }))}>Cancel</Button>

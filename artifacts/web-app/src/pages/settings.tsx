@@ -10,7 +10,7 @@ import * as z from "zod";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Building, User, Mail, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
+import { Building, User, Mail, KeyRound, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { apiSaveSmtp, apiTestSmtp, apiChangePassword } from "@/lib/platform-api";
 import { Switch } from "@/components/ui/switch";
 
@@ -48,6 +48,7 @@ export default function SettingsPage() {
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpSaving, setSmtpSaving] = useState(false);
   const [changingPass, setChangingPass] = useState(false);
+  const [showGmailSteps, setShowGmailSteps] = useState(false);
 
   const updateUser = useUpdateUser();
   const updateCompany = useUpdateCompany();
@@ -114,7 +115,7 @@ export default function SettingsPage() {
     try {
       const res = await apiTestSmtp(user.companyId, values);
       if (res.success) {
-        toast({ title: "SMTP Connected", description: "Connection verified successfully." });
+        toast({ title: "SMTP Connected ✓", description: "Connection verified successfully." });
       } else {
         toast({ title: "SMTP Failed", description: res.message, variant: "destructive" });
       }
@@ -250,15 +251,57 @@ export default function SettingsPage() {
         <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur">
           <CardHeader>
             <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-primary" /><CardTitle className="text-base">Email / SMTP Settings</CardTitle></div>
-            <CardDescription>Configure email delivery for invitations and notifications. Supports custom SMTP or Gmail App Passwords.</CardDescription>
+            <CardDescription>Configure email delivery for invitations and notifications.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 mb-4 space-y-1">
-              <p className="font-semibold text-foreground">Gmail setup:</p>
-              <p>Host: <code className="font-mono">smtp.gmail.com</code> · Port: <code className="font-mono">587</code> · User: your Gmail · Pass: Gmail App Password</p>
-              <p className="font-semibold text-foreground mt-2">Custom SMTP:</p>
-              <p>Use your mail provider's SMTP credentials. Port 465 uses SSL, port 587 uses STARTTLS.</p>
+          <CardContent className="space-y-5">
+
+            {/* Gmail App Password Guide */}
+            <div className="border border-border/50 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowGmailSteps(s => !s)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-base">📧</span> How to get a Gmail App Password
+                </span>
+                {showGmailSteps ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+              {showGmailSteps && (
+                <div className="px-4 py-4 space-y-3 text-sm border-t border-border/40 bg-muted/10">
+                  <p className="text-muted-foreground text-xs">Gmail requires an App Password (not your regular password) when 2-Step Verification is enabled.</p>
+                  <ol className="space-y-2 list-decimal list-inside text-foreground/80">
+                    <li>Go to your Google Account → <strong>Security</strong></li>
+                    <li>Under "How you sign in to Google", ensure <strong>2-Step Verification</strong> is turned on</li>
+                    <li>In the search bar at the top of your Google Account page, type <strong>"App Passwords"</strong> and open it</li>
+                    <li>In the "App name" field, type <strong>SYNTRA</strong> (or any name) and click <strong>Create</strong></li>
+                    <li>Google will display a <strong>16-character password</strong> — copy it (spaces are optional)</li>
+                    <li>Paste it into the <strong>Password / App Password</strong> field below</li>
+                  </ol>
+                  <div className="mt-3 p-3 bg-muted/50 rounded-md text-xs font-mono space-y-1 text-muted-foreground">
+                    <div><span className="text-foreground font-semibold">Host:</span> smtp.gmail.com</div>
+                    <div><span className="text-foreground font-semibold">Port:</span> 587</div>
+                    <div><span className="text-foreground font-semibold">SSL/TLS:</span> Off (uses STARTTLS)</div>
+                    <div><span className="text-foreground font-semibold">Username:</span> your full Gmail address</div>
+                    <div><span className="text-foreground font-semibold">Password:</span> 16-character App Password</div>
+                  </div>
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary text-xs font-semibold hover:underline mt-1"
+                  >
+                    Open Google App Passwords <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
             </div>
+
+            {/* Custom SMTP note */}
+            <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2.5 border border-border/40">
+              <span className="font-semibold text-foreground">Custom SMTP:</span> Port 465 uses SSL/TLS · Port 587 uses STARTTLS · Username and From Address can use different email domains on the same host.
+            </div>
+
             <Form {...smtpForm}>
               <form className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -286,7 +329,12 @@ export default function SettingsPage() {
                   )} />
                 </div>
                 <FormField control={smtpForm.control} name="from" render={({ field }) => (
-                  <FormItem><FormLabel>From Address</FormLabel><FormControl><Input placeholder="SYNTRA <noreply@company.com>" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>From Address</FormLabel>
+                    <FormControl><Input placeholder='SYNTRA <noreply@yourcompany.com>' {...field} /></FormControl>
+                    <p className="text-[11px] text-muted-foreground mt-1">Can be a different domain than your username — e.g. username is <code>support@host.com</code>, from is <code>noreply@company.com</code></p>
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button type="button" variant="outline" size="sm" disabled={smtpTesting} onClick={smtpForm.handleSubmit(onSmtpTest)}>

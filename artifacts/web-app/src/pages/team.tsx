@@ -8,30 +8,39 @@ import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { Users, MoreHorizontal, UserX, UserCheck } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
 
 export default function TeamPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: users = [], isLoading } = useListUsers({ query: { enabled: !!user , queryKey: getListUsersQueryKey() } });
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
 
-  const handleUpdateStatus = (id: number, status: 'active' | 'inactive') => {
+  const isAdmin = user?.role === "admin";
+  const isManager = user?.role === "manager";
+
+  const handleUpdateStatus = (id: number, status: 'active' | 'inactive', targetRole: string) => {
+    if (isManager && (targetRole === "admin")) {
+      toast({ title: "Permission denied", description: "Managers cannot deactivate admin accounts.", variant: "destructive" });
+      return;
+    }
     updateUser.mutate({ id, data: { status } }, {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/users'] })
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() })
     });
   };
 
   const handleUpdateRole = (id: number, role: 'admin' | 'manager' | 'employee') => {
     updateUser.mutate({ id, data: { role } }, {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/users'] })
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() })
     });
   };
 
   const handleDelete = (id: number) => {
     if (confirm("Are you sure you want to remove this user?")) {
       deleteUser.mutate({ id }, {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/users'] })
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() })
       });
     }
   };
@@ -73,64 +82,75 @@ export default function TeamPage() {
                 ) : users.length === 0 ? (
                   <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No team members found.</TableCell></TableRow>
                 ) : (
-                  users.map((member) => (
-                    <TableRow key={member.id} className="hover:bg-muted/30">
-                      <TableCell>
-                        <div className="font-semibold">{member.name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">{member.hourlyRate ? `$${member.hourlyRate}/hr` : 'Salary'}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">{member.email}</div>
-                        <div className="text-xs text-muted-foreground">{member.phone || '-'}</div>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          disabled={member.id === user?.id || user?.role !== 'admin'}
-                          value={member.role}
-                          onValueChange={(val: any) => handleUpdateRole(member.id, val)}
-                        >
-                          <SelectTrigger className="w-[120px] h-8 text-xs font-mono">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="manager">Manager</SelectItem>
-                            <SelectItem value="employee">Employee</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded text-xs font-mono border ${member.status === 'active' ? 'bg-accent/10 text-accent-foreground border-accent/20' : 'bg-muted text-muted-foreground border-border'}`}>
-                          {member.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {member.status === 'active' ? (
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'inactive')}>
-                                <UserX className="w-4 h-4 mr-2" /> Deactivate
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'active')}>
-                                <UserCheck className="w-4 h-4 mr-2" /> Activate
-                              </DropdownMenuItem>
-                            )}
-                            {user?.role === 'admin' && member.id !== user.id && (
-                              <DropdownMenuItem onClick={() => handleDelete(member.id)} className="text-destructive">
-                                <UserX className="w-4 h-4 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  users.map((member) => {
+                    const isOwnAccount = member.id === user?.id;
+                    const targetIsAdmin = member.role === "admin";
+                    const canManage = isAdmin || (!targetIsAdmin && isManager);
+                    return (
+                      <TableRow key={member.id} className="hover:bg-muted/30">
+                        <TableCell>
+                          <div className="font-semibold">{member.name}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{member.hourlyRate ? `$${member.hourlyRate}/hr` : 'Salary'}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{member.email}</div>
+                          <div className="text-xs text-muted-foreground">{member.phone || '-'}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            disabled={isOwnAccount || !isAdmin}
+                            value={member.role}
+                            onValueChange={(val: any) => handleUpdateRole(member.id, val)}
+                          >
+                            <SelectTrigger className="w-[120px] h-8 text-xs font-mono">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="manager">Manager</SelectItem>
+                              <SelectItem value="employee">Employee</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 rounded text-xs font-mono border ${member.status === 'active' ? 'bg-accent/10 text-accent-foreground border-accent/20' : 'bg-muted text-muted-foreground border-border'}`}>
+                            {member.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {!isOwnAccount && canManage ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {isAdmin && (
+                                  member.status === 'active' ? (
+                                    <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'inactive', member.role)}>
+                                      <UserX className="w-4 h-4 mr-2" /> Deactivate
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'active', member.role)}>
+                                      <UserCheck className="w-4 h-4 mr-2" /> Activate
+                                    </DropdownMenuItem>
+                                  )
+                                )}
+                                {isAdmin && (
+                                  <DropdownMenuItem onClick={() => handleDelete(member.id)} className="text-destructive">
+                                    <UserX className="w-4 h-4 mr-2" /> Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

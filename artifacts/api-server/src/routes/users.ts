@@ -70,24 +70,44 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   const id = parseId(req.params["id"], res);
   if (id === null) return;
-  const { companyId, userId, role } = req.auth!;
+  const { companyId, userId, role: callerRole } = req.auth!;
   if (!companyId) {
     res.status(400).json({ error: "No company associated with this account" });
     return;
   }
-  if (id !== userId && !["admin", "manager"].includes(role)) {
+  if (id !== userId && !["admin", "manager"].includes(callerRole)) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
+
   const parsed = updateUserSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+
+  // Managers cannot modify admins (status, role changes, etc.)
+  if (callerRole === "manager" && id !== userId) {
+    const [target] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(and(eq(users.id, id), eq(users.companyId, companyId)))
+      .limit(1);
+    if (target?.role === "admin") {
+      res.status(403).json({ error: "Managers cannot modify admin or owner accounts" });
+      return;
+    }
+  }
+
   const updates = { ...parsed.data };
-  if (updates.role && role !== "admin") {
+  if (updates.role && callerRole !== "admin") {
     delete updates.role;
   }
+  // Only admins can deactivate/activate users
+  if (updates.status && callerRole !== "admin") {
+    delete updates.status;
+  }
+
   const [updated] = await db
     .update(users)
     .set(updates)
