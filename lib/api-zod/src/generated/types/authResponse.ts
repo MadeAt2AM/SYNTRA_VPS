@@ -5,7 +5,9 @@
  * Workforce scheduling API
  * OpenAPI spec version: 0.2.0
  */
+import type { AuthUser } from './authUser';
 
-export interface HealthStatus {
-  status: string;
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
 }

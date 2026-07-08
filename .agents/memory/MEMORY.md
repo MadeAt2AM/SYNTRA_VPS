@@ -1,0 +1,2 @@
+- [ShiftWise stack & seeding](shiftwise-setup.md) — pnpm monorepo, Express 5 + Drizzle + JWT; schema already pushed; seed data inserted; bcrypt hash generation must use ShellExec not CodeExecution sandbox
+- [ShiftWise 4 roles](shiftwise-roles.md) — platform_admin (no company_id, /api/platform/* only), admin (owner), manager, employee; role guards added in App.tsx via RequireAuth+RequireRole components

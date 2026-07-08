@@ -5,7 +5,9 @@
  * Workforce scheduling API
  * OpenAPI spec version: 0.2.0
  */
+import type { ErrorResponse } from './errorResponse';
 
-export interface HealthStatus {
-  status: string;
-}
+/**
+ * Unauthorized
+ */
+export type UnauthorizedResponse = ErrorResponse;

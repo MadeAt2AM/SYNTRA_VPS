@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+/**
+ * Flexible JSON e.g. { monday: ['09:00-17:00'] }
+ */
+export type AvailabilitySlots = { [key: string]: unknown };
