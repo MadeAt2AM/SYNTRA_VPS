@@ -1,0 +1,21 @@
+# One-off migration container — runs drizzle-kit push then exits
+# Usage: docker compose run --rm migrate
+FROM node:20-alpine
+WORKDIR /workspace
+
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.json ./
+COPY lib/db/package.json ./lib/db/package.json
+COPY lib/db/tsconfig.json ./lib/db/tsconfig.json
+COPY lib/api-zod/package.json ./lib/api-zod/package.json
+COPY lib/api-zod/tsconfig.json ./lib/api-zod/tsconfig.json
+COPY lib/api-client-react/package.json ./lib/api-client-react/package.json
+COPY lib/api-client-react/tsconfig.json ./lib/api-client-react/tsconfig.json
+COPY lib/api-spec/package.json ./lib/api-spec/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY lib/ ./lib/
+
+CMD ["pnpm", "--filter", "@workspace/db", "run", "push"]

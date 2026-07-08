@@ -21,3 +21,12 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+CONTACT_EMAIL_FROM = "SYNTRA Enquiries <support@madeat2am.in>"
+CONTACT_EMAIL_TO = "chris@madeat2am.in"
+CONTACT_SMTP_HOST = "mail.cyberslide.net"
+CONTACT_SMTP_PORT = "587"
+CONTACT_SMTP_USER = "support@madeat2am.in"

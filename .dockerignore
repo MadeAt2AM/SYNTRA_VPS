@@ -1,0 +1,36 @@
+# Git / CI
+.git
+.gitignore
+.github
+
+# Node
+node_modules
+**/node_modules
+
+# Build outputs (rebuilt inside Docker)
+**/dist
+**/dist/public
+
+# Secrets — never bake into the image
+.env
+.env.local
+.env.production
+
+# Editor / OS
+.vscode
+.idea
+*.DS_Store
+Thumbs.db
+
+# Replit-specific
+.replit
+.local
+replit.nix
+.upm
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / docs (optional to include)
+# docs/

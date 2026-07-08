@@ -1,0 +1,66 @@
+# ─── Stage 1: Builder ─────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /workspace
+
+# Enable corepack / pnpm
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Copy workspace config files first (layer caching)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.json ./
+
+# Copy package.json for every workspace package (needed for pnpm hoisting)
+COPY lib/db/package.json                  ./lib/db/package.json
+COPY lib/db/tsconfig.json                 ./lib/db/tsconfig.json
+COPY lib/api-zod/package.json             ./lib/api-zod/package.json
+COPY lib/api-zod/tsconfig.json            ./lib/api-zod/tsconfig.json
+COPY lib/api-client-react/package.json    ./lib/api-client-react/package.json
+COPY lib/api-client-react/tsconfig.json   ./lib/api-client-react/tsconfig.json
+COPY lib/api-spec/package.json            ./lib/api-spec/package.json
+COPY artifacts/api-server/package.json    ./artifacts/api-server/package.json
+COPY artifacts/api-server/tsconfig.json   ./artifacts/api-server/tsconfig.json
+
+# Install ALL dependencies (dev deps needed for build tools)
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY lib/ ./lib/
+COPY artifacts/api-server/ ./artifacts/api-server/
+
+# Build the bundle
+RUN pnpm --filter @workspace/api-server run build
+
+# ─── Stage 2: Runtime dependency installer ────────────────────────────────────
+# nodemailer is externalized from the esbuild bundle so we need it at runtime
+FROM node:20-alpine AS deps
+WORKDIR /runtime
+# Install only the runtime packages that were excluded from the bundle
+RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"dependencies":{"nodemailer":"^9.0.3"}}' > package.json \
+    && npm install --production --no-fund --no-audit
+
+# ─── Stage 3: Final runtime image ─────────────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+# Non-root user for security
+RUN addgroup -S syntra && adduser -S syntra -G syntra
+
+# Copy built bundle from builder
+COPY --from=builder /workspace/artifacts/api-server/dist ./dist
+# Copy pino worker files (side output from esbuild-plugin-pino)
+# These are already in dist from the build step
+
+# Copy runtime node_modules (nodemailer + its deps)
+COPY --from=deps /runtime/node_modules ./node_modules
+
+# Ownership
+RUN chown -R syntra:syntra /app
+USER syntra
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:8080/api/healthz || exit 1
+
+CMD ["node", "--enable-source-maps", "dist/index.mjs"]

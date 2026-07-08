@@ -1,0 +1,88 @@
+version: "3.9"
+
+# ── SYNTRA Docker Compose ──────────────────────────────────────────────────────
+# Runs three services: postgres, api (Express), web (nginx + React SPA)
+# Copy .env.example → .env and fill in your values before starting.
+# Start: docker compose up -d
+# Logs:  docker compose logs -f
+# Stop:  docker compose down
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: syntra_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       syntra
+      POSTGRES_USER:     syntra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syntra -d syntra"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Database Migration (run once on first deploy) ───────────────────────────
+  # Usage: docker compose run --rm migrate
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    container_name: syntra_migrate
+    environment:
+      DATABASE_URL: postgresql://syntra:${POSTGRES_PASSWORD}@postgres:5432/syntra
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["migration"]
+
+  # ── Express API Server ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: syntra_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV:             production
+      PORT:                 8080
+      DATABASE_URL:         postgresql://syntra:${POSTGRES_PASSWORD}@postgres:5432/syntra
+      SESSION_SECRET:       ${SESSION_SECRET}
+      # Contact form SMTP
+      CONTACT_SMTP_HOST:   ${CONTACT_SMTP_HOST:-mail.cyberslide.net}
+      CONTACT_SMTP_PORT:   ${CONTACT_SMTP_PORT:-587}
+      CONTACT_SMTP_USER:   ${CONTACT_SMTP_USER:-support@madeat2am.in}
+      CONTACT_SMTP_PASS:   ${CONTACT_SMTP_PASS}
+      CONTACT_EMAIL_TO:    ${CONTACT_EMAIL_TO:-chris@madeat2am.in}
+      CONTACT_EMAIL_FROM:  ${CONTACT_EMAIL_FROM:-SYNTRA Enquiries <support@madeat2am.in>}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── Nginx + React SPA ──────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: syntra_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
