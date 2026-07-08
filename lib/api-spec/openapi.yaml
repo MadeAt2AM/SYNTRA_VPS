@@ -996,10 +996,12 @@ components:
           type: string
           nullable: true
         latitude:
-          type: string
+          type: number
+          format: double
           nullable: true
         longitude:
-          type: string
+          type: number
+          format: double
           nullable: true
         radiusMeters:
           type: integer
@@ -1017,10 +1019,12 @@ components:
           type: string
           nullable: true
         latitude:
-          type: string
+          type: number
+          format: double
           nullable: true
         longitude:
-          type: string
+          type: number
+          format: double
           nullable: true
         radiusMeters:
           type: integer

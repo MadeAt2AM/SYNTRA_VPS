@@ -11,12 +11,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { MapPin, Plus, Trash2 } from "lucide-react";
+import { MapPin, Plus, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const workplaceSchema = z.object({
   name: z.string().min(2, "Name required"),
   address: z.string().optional(),
+  // Preprocess empty string → undefined so optional fields aren't coerced to 0
+  latitude: z.preprocess(
+    v => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+    z.number({ invalid_type_error: "Must be a number" }).min(-90, "Must be ≥ -90").max(90, "Must be ≤ 90").optional()
+  ),
+  longitude: z.preprocess(
+    v => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+    z.number({ invalid_type_error: "Must be a number" }).min(-180, "Must be ≥ -180").max(180, "Must be ≤ 180").optional()
+  ),
   radiusMeters: z.coerce.number().min(10).default(100),
 });
 
@@ -31,7 +40,7 @@ export default function WorkplacesPage() {
 
   const form = useForm<z.infer<typeof workplaceSchema>>({
     resolver: zodResolver(workplaceSchema),
-    defaultValues: { name: "", address: "", radiusMeters: 100 },
+    defaultValues: { name: "", address: "", latitude: undefined, longitude: undefined, radiusMeters: 100 },
   });
 
   if (user?.role === 'employee') return <div>Access Denied</div>;
@@ -102,6 +111,39 @@ export default function WorkplacesPage() {
                     </FormItem>
                   )}
                 />
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="latitude"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Latitude</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="any" placeholder="-33.8688" {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="longitude"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Longitude</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="any" placeholder="151.2093" {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  Required for geofence clock-in validation. Find coordinates on{" "}
+                  <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="underline">Google Maps</a>{" "}
+                  by right-clicking a location.
+                </p>
                 <FormField
                   control={form.control}
                   name="radiusMeters"
@@ -140,6 +182,7 @@ export default function WorkplacesPage() {
                 <TableRow>
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Name</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Address</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider">Coordinates</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Radius</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Actions</TableHead>
                 </TableRow>
@@ -154,6 +197,17 @@ export default function WorkplacesPage() {
                     <TableRow key={wp.id} className="hover:bg-muted/30">
                       <TableCell className="font-semibold">{wp.name}</TableCell>
                       <TableCell className="text-muted-foreground">{wp.address || '-'}</TableCell>
+                      <TableCell>
+                        {wp.latitude != null && wp.longitude != null ? (
+                          <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                            {wp.latitude.toFixed(4)}, {wp.longitude.toFixed(4)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <AlertTriangle className="w-3 h-3" /> Not set
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>{wp.radiusMeters}m</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(wp.id)}>

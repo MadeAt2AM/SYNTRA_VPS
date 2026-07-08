@@ -281,6 +281,36 @@ router.post("/", async (req, res) => {
     }
   }
 
+  // ── Geofence check for free clock-ins (no shift selected) ─────────────────
+  // When no shift is linked we don't know the intended workplace, so we check
+  // whether the employee is inside ANY of the company's configured workplaces.
+  if (!locationValid && hasCoords && spoofFlags.length === 0 && resolvedShiftId === null) {
+    const companyWorkplaces = await db
+      .select()
+      .from(workplaces)
+      .where(
+        and(
+          eq(workplaces.companyId, companyId),
+          isNotNull(workplaces.latitude),
+          isNotNull(workplaces.longitude),
+        ),
+      );
+
+    for (const wp of companyWorkplaces) {
+      if (wp.latitude == null || wp.longitude == null) continue;
+      const dist = haversineDistance(
+        latitude!,
+        longitude!,
+        parseFloat(wp.latitude),
+        parseFloat(wp.longitude),
+      );
+      if (dist <= wp.radiusMeters) {
+        locationValid = true;
+        break;
+      }
+    }
+  }
+
   // ── Duplicate open-log guard ───────────────────────────────────────────────
   const [open] = await db
     .select({ id: timeLogs.id })

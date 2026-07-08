@@ -227,8 +227,8 @@ export const ListWorkplacesResponseItem = zod.object({
   "companyId": zod.number(),
   "name": zod.string(),
   "address": zod.string().nullish(),
-  "latitude": zod.string().nullish(),
-  "longitude": zod.string().nullish(),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
   "radiusMeters": zod.number(),
   "createdAt": zod.coerce.date().optional()
 })
@@ -241,8 +241,8 @@ export const ListWorkplacesResponse = zod.array(ListWorkplacesResponseItem)
 export const CreateWorkplaceBody = zod.object({
   "name": zod.string(),
   "address": zod.string().nullish(),
-  "latitude": zod.string().nullish(),
-  "longitude": zod.string().nullish(),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
   "radiusMeters": zod.number().optional()
 })
 
@@ -251,8 +251,8 @@ export const CreateWorkplaceResponse = zod.object({
   "companyId": zod.number(),
   "name": zod.string(),
   "address": zod.string().nullish(),
-  "latitude": zod.string().nullish(),
-  "longitude": zod.string().nullish(),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
   "radiusMeters": zod.number(),
   "createdAt": zod.coerce.date().optional()
 })
@@ -270,8 +270,8 @@ export const GetWorkplaceResponse = zod.object({
   "companyId": zod.number(),
   "name": zod.string(),
   "address": zod.string().nullish(),
-  "latitude": zod.string().nullish(),
-  "longitude": zod.string().nullish(),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
   "radiusMeters": zod.number(),
   "createdAt": zod.coerce.date().optional()
 })
@@ -287,8 +287,8 @@ export const UpdateWorkplaceParams = zod.object({
 export const UpdateWorkplaceBody = zod.object({
   "name": zod.string(),
   "address": zod.string().nullish(),
-  "latitude": zod.string().nullish(),
-  "longitude": zod.string().nullish(),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
   "radiusMeters": zod.number().optional()
 })
 
@@ -297,8 +297,8 @@ export const UpdateWorkplaceResponse = zod.object({
   "companyId": zod.number(),
   "name": zod.string(),
   "address": zod.string().nullish(),
-  "latitude": zod.string().nullish(),
-  "longitude": zod.string().nullish(),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
   "radiusMeters": zod.number(),
   "createdAt": zod.coerce.date().optional()
 })

@@ -1,0 +1,55 @@
+Now I have the full picture. Here's the diagnosis:
+
+Frontend form — only has name, address, radiusMeters. No lat/lng fields at all, so coordinates are never saved to the workplace.
+Geofence check — time-logs.ts line 265 checks wp.latitude != null && wp.longitude != null before validating, but since workplaces never have coordinates, it always skips → locationValid stays false.
+Backend schema — accepts z.string() for lat/lng, but the frontend would naturally send numbers.
+Free clock-ins (no shift) — geofence is entirely skipped since the check is inside if (resolvedShiftId != null).
+Fixing all four issues now.
+
+
+4 actions
+Let me make all remaining changes in parallel.
+
+
+3 actions
+Now let me add the lat/lng form fields to the UI, fix the table display, fix the DB insertion conversion, and fix free clock-in geofence — all in parallel.
+
+
+2 actions
+Continuing with the remaining fixes in parallel.
+
+
+4 actions
+Now fixing the backend — convert number lat/lng to strings for DB, and add geofence validation for free clock-ins.
+
+
+2 actions
+Now fixing the PUT (update) workplace route to also convert lat/lng, and adding geofence validation for free clock-ins in time-logs.
+
+
+2 actions
+Now adding geofence validation for free clock-ins (no shift selected) in time-logs.ts:
+
+
+4 actions
+The HMR errors are a transient Vite hot-reload artifact (pre-existing, not from my changes). The API server needs to be rebuilt to pick up the time-logs.ts and workplaces.ts changes. Let me restart it and do a quick typecheck at the same time.
+
+
+4 actions
+Let me do a quick verification and run the code review in parallel.
+
+
+4 actions
+Two issues to fix: the Zod schema's empty-string handling and the TypeScript type mismatch. I'll update the OpenAPI spec (lat/lng → number type), regenerate types, and fix the form schema.
+
+
+3 actions
+Updating the OpenAPI spec (both Workplace and WorkplaceRequest) and fixing the frontend Zod schema in parallel.
+
+
+2 actions
+Now fix the frontend Zod schema for proper empty-string handling, then run codegen.
+
+
+Edited workplaces.tsx
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.

@@ -12,10 +12,23 @@ router.use(requireAuth);
 const workplaceSchema = z.object({
   name: z.string().min(1),
   address: z.string().optional().nullable(),
-  latitude: z.string().optional().nullable(),
-  longitude: z.string().optional().nullable(),
+  // Accept numbers from the form (coerced to string for numeric DB column)
+  latitude: z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
   radiusMeters: z.number().int().min(1).optional(),
 });
+
+// Drizzle returns `numeric` columns as strings. The OpenAPI contract (and
+// generated client types) declare latitude/longitude as `number`, so every
+// response must convert them back before serialization.
+type WorkplaceRow = typeof workplaces.$inferSelect;
+function serializeWorkplace(wp: WorkplaceRow) {
+  return {
+    ...wp,
+    latitude: wp.latitude != null ? Number(wp.latitude) : null,
+    longitude: wp.longitude != null ? Number(wp.longitude) : null,
+  };
+}
 
 // GET /api/workplaces
 router.get("/", async (req, res) => {
@@ -28,7 +41,7 @@ router.get("/", async (req, res) => {
     .select()
     .from(workplaces)
     .where(eq(workplaces.companyId, companyId));
-  res.json(result);
+  res.json(result.map(serializeWorkplace));
 });
 
 // POST /api/workplaces
@@ -43,11 +56,17 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { latitude, longitude, ...rest } = parsed.data;
   const [wp] = await db
     .insert(workplaces)
-    .values({ ...parsed.data, companyId })
+    .values({
+      ...rest,
+      latitude: latitude != null ? String(latitude) : null,
+      longitude: longitude != null ? String(longitude) : null,
+      companyId,
+    })
     .returning();
-  res.status(201).json(wp);
+  res.status(201).json(serializeWorkplace(wp));
 });
 
 // GET /api/workplaces/:id
@@ -68,7 +87,7 @@ router.get("/:id", async (req, res) => {
     res.status(404).json({ error: "Workplace not found" });
     return;
   }
-  res.json(wp);
+  res.json(serializeWorkplace(wp));
 });
 
 // PUT /api/workplaces/:id
@@ -85,16 +104,20 @@ router.put("/:id", requireRole("admin", "manager"), async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { latitude, longitude, ...restUpdate } = parsed.data;
+  const updateData: Record<string, unknown> = { ...restUpdate };
+  if (latitude !== undefined) updateData.latitude = latitude != null ? String(latitude) : null;
+  if (longitude !== undefined) updateData.longitude = longitude != null ? String(longitude) : null;
   const [updated] = await db
     .update(workplaces)
-    .set(parsed.data)
+    .set(updateData)
     .where(and(eq(workplaces.id, id), eq(workplaces.companyId, companyId)))
     .returning();
   if (!updated) {
     res.status(404).json({ error: "Workplace not found" });
     return;
   }
-  res.json(updated);
+  res.json(serializeWorkplace(updated));
 });
 
 // DELETE /api/workplaces/:id

@@ -114,8 +114,8 @@ export interface Workplace {
   companyId: number;
   name: string;
   address?: string | null;
-  latitude?: string | null;
-  longitude?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   radiusMeters: number;
   createdAt?: string;
 }
@@ -123,8 +123,8 @@ export interface Workplace {
 export interface WorkplaceRequest {
   name: string;
   address?: string | null;
-  latitude?: string | null;
-  longitude?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   radiusMeters?: number;
 }
 
