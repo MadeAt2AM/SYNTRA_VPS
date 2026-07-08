@@ -634,7 +634,9 @@ export const ListTimeLogsResponse = zod.array(ListTimeLogsResponseItem)
 export const ClockInBody = zod.object({
   "shiftId": zod.number().nullish(),
   "latitude": zod.number().nullish(),
-  "longitude": zod.number().nullish()
+  "longitude": zod.number().nullish(),
+  "accuracy": zod.number().nullish().describe('GPS accuracy radius in metres reported by the device'),
+  "positionTimestamp": zod.number().nullish().describe('Unix ms timestamp from the Geolocation API position object')
 })
 
 export const ClockInResponse = zod.object({

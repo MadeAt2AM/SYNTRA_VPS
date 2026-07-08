@@ -1296,6 +1296,14 @@ components:
         longitude:
           type: number
           nullable: true
+        accuracy:
+          type: number
+          nullable: true
+          description: GPS accuracy radius in metres reported by the device
+        positionTimestamp:
+          type: number
+          nullable: true
+          description: Unix ms timestamp from the Geolocation API position object
 
     ClockOutRequest:
       type: object

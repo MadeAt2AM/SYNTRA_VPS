@@ -314,6 +314,10 @@ export interface ClockInRequest {
   shiftId?: number | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** GPS accuracy radius in metres reported by the device */
+  accuracy?: number | null;
+  /** Unix ms timestamp from the Geolocation API position object */
+  positionTimestamp?: number | null;
 }
 
 export interface ClockOutRequest {

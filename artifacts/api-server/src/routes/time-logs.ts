@@ -29,6 +29,10 @@ const clockInSchema = z.object({
   // locationValid is intentionally NOT accepted from the client — derived server-side only
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
+  /** GPS accuracy radius in metres from the browser Geolocation API */
+  accuracy: z.number().optional().nullable(),
+  /** Unix-ms timestamp from the browser position object — used for freshness check */
+  positionTimestamp: z.number().optional().nullable(),
 });
 
 const employeeClockOutSchema = z.object({
@@ -153,12 +157,84 @@ router.post("/", async (req, res) => {
   }
 
   const now = new Date();
-  // locationValid is always false until server-side geofence check confirms it
   let locationValid = false;
   let payrollIn: Date | null = null;
   let resolvedShiftId: number | null = parsed.data.shiftId ?? null;
+  const spoofFlags: string[] = [];
 
-  // Validate shift: must belong to company AND be assigned to the clocking-in employee
+  const { latitude, longitude, accuracy, positionTimestamp } = parsed.data;
+  const hasCoords = latitude != null && longitude != null;
+
+  // ── Anti-spoofing checks (run whenever coordinates are provided) ───────────
+
+  if (hasCoords) {
+    // 1. Accuracy check
+    //    Real GPS hardware never reports exactly 0 m accuracy — that value is
+    //    the fingerprint of most mock-location providers.
+    //    Suspiciously perfect accuracy (< 2 m) is also characteristic of fakes.
+    //    Accuracy > 1000 m means the device has no real fix and cannot reliably
+    //    verify a geofence.
+    if (accuracy != null) {
+      if (accuracy === 0) {
+        spoofFlags.push("zero_accuracy");          // certain mock provider signature
+      } else if (accuracy < 2) {
+        spoofFlags.push("suspicious_accuracy");    // implausibly perfect
+      } else if (accuracy > 1000) {
+        spoofFlags.push("poor_accuracy");          // no real GPS fix
+      }
+    }
+
+    // 2. Position freshness check
+    //    The browser Geolocation API returns a `timestamp` (Unix ms) on the
+    //    position object. Require it to be ≤ 90 seconds old so employees
+    //    cannot replay a cached coordinate obtained at a real location earlier.
+    if (positionTimestamp != null) {
+      const ageSeconds = (now.getTime() - positionTimestamp) / 1000;
+      if (ageSeconds > 90) {
+        spoofFlags.push("stale_position");
+      }
+    }
+
+    // 3. Velocity plausibility check
+    //    Fetch the most recent *completed* log for this employee that has stored
+    //    coordinates. Compute the implied travel speed since that log's clock-out.
+    //    > 500 km/h is physically impossible for ground transport.
+    const [prevLog] = await db
+      .select({
+        actualOut: timeLogs.actualOut,
+        clockInLat: timeLogs.clockInLat,
+        clockInLng: timeLogs.clockInLng,
+      })
+      .from(timeLogs)
+      .where(
+        and(
+          eq(timeLogs.employeeId, userId),
+          isNotNull(timeLogs.actualOut),
+          isNotNull(timeLogs.clockInLat),
+          isNotNull(timeLogs.clockInLng),
+        ),
+      )
+      .orderBy(timeLogs.actualOut)
+      .limit(1);
+
+    if (prevLog?.actualOut && prevLog.clockInLat && prevLog.clockInLng) {
+      const elapsedSeconds = (now.getTime() - new Date(prevLog.actualOut).getTime()) / 1000;
+      if (elapsedSeconds > 0) {
+        const distMeters = haversineDistance(
+          parseFloat(prevLog.clockInLat),
+          parseFloat(prevLog.clockInLng),
+          latitude!,
+          longitude!,
+        );
+        const speedKmh = (distMeters / 1000) / (elapsedSeconds / 3600);
+        if (speedKmh > 500) {
+          spoofFlags.push("impossible_speed");
+        }
+      }
+    }
+  }
+
+  // ── Validate shift: must belong to company AND be assigned to this employee ─
   if (resolvedShiftId != null) {
     const [shift] = await db
       .select()
@@ -176,10 +252,10 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    // ── Location verification ──────────────────────────────────────────────
-    // If shift has a workplace and the employee sent their coordinates, compute
-    // distance and auto-set locationValid.
-    if (shift.workplaceId != null && parsed.data.latitude != null && parsed.data.longitude != null) {
+    // ── Geofence check (only when no spoofing flags are raised) ──────────────
+    // If any spoofing signal fired we already know locationValid stays false,
+    // so skip the geofence check to avoid a misleading "in-range" result.
+    if (hasCoords && spoofFlags.length === 0 && shift.workplaceId != null) {
       const [wp] = await db
         .select()
         .from(workplaces)
@@ -188,8 +264,8 @@ router.post("/", async (req, res) => {
 
       if (wp && wp.latitude != null && wp.longitude != null) {
         const dist = haversineDistance(
-          parsed.data.latitude,
-          parsed.data.longitude,
+          latitude!,
+          longitude!,
           parseFloat(wp.latitude),
           parseFloat(wp.longitude),
         );
@@ -198,15 +274,14 @@ router.post("/", async (req, res) => {
     }
 
     // ── Auto payroll start time ────────────────────────────────────────────
-    // If clocking in within 10 minutes of shift start, use shift start as payrollIn
     const shiftStart = new Date(shift.startTime);
-    const diffMs = now.getTime() - shiftStart.getTime();
-    const diffMins = diffMs / 60000; // positive = clocked in AFTER shift start
+    const diffMins = (now.getTime() - shiftStart.getTime()) / 60000;
     if (diffMins >= -10 && diffMins <= 10) {
       payrollIn = shiftStart;
     }
   }
 
+  // ── Duplicate open-log guard ───────────────────────────────────────────────
   const [open] = await db
     .select({ id: timeLogs.id })
     .from(timeLogs)
@@ -225,6 +300,9 @@ router.post("/", async (req, res) => {
       actualIn: now,
       shiftId: resolvedShiftId,
       locationValid,
+      clockInLat: latitude != null ? String(latitude) : null,
+      clockInLng: longitude != null ? String(longitude) : null,
+      locationFlags: spoofFlags.length > 0 ? spoofFlags.join(",") : null,
       payrollIn,
     })
     .returning();

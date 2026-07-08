@@ -25,6 +25,8 @@ interface ClockInDialogState {
   geoStatus: GeoStatus;
   latitude: number | null;
   longitude: number | null;
+  accuracy: number | null;
+  positionTimestamp: number | null;
   distanceMeters: number | null;
 }
 
@@ -65,6 +67,8 @@ export default function TimeLogsPage() {
     geoStatus: "idle",
     latitude: null,
     longitude: null,
+    accuracy: null,
+    positionTimestamp: null,
     distanceMeters: null,
   });
 
@@ -103,6 +107,8 @@ export default function TimeLogsPage() {
           ...d,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          positionTimestamp: pos.timestamp,
           geoStatus: "idle", // server will compute actual validation
         }));
       },
@@ -120,6 +126,8 @@ export default function TimeLogsPage() {
       geoStatus: "idle",
       latitude: null,
       longitude: null,
+      accuracy: null,
+      positionTimestamp: null,
       distanceMeters: null,
     });
   }
@@ -134,6 +142,8 @@ export default function TimeLogsPage() {
           shiftId: clockInDialog.selectedShiftId ?? undefined,
           latitude: clockInDialog.latitude ?? undefined,
           longitude: clockInDialog.longitude ?? undefined,
+          accuracy: clockInDialog.accuracy ?? undefined,
+          positionTimestamp: clockInDialog.positionTimestamp ?? undefined,
         } as any,
       },
       {

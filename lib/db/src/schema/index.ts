@@ -160,6 +160,9 @@ export const timeLogs = pgTable("time_logs", {
   payrollIn: timestamp("payroll_in"),
   payrollOut: timestamp("payroll_out"),
   locationValid: boolean("location_valid").notNull().default(false),
+  clockInLat: numeric("clock_in_lat"),
+  clockInLng: numeric("clock_in_lng"),
+  locationFlags: text("location_flags"), // comma-separated spoofing signals for manager review
   validatedHours: numeric("validated_hours"),
   managerValidated: boolean("manager_validated").notNull().default(false),
   managerValidatedAt: timestamp("manager_validated_at"),
