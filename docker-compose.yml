@@ -106,9 +106,15 @@ services:
     restart: unless-stopped
     # No host port mapping — Caddy reverse-proxies via the shared `web` network
     # (see /srv/caddy/sites/syntra.caddy on the host).
+    #
+    # Docker only auto-registers the container_name as a DNS label — hyphens in
+    # compose service names don't become aliases. Caddy reaches `syntra-web:80`,
+    # so we explicitly alias it on the `web` network (along with the historic
+    # `syntra-app` alias used by project_dev.sh patterns elsewhere).
     networks:
       web:
         aliases:
+          - syntra-web
           - syntra-app
       private:
         aliases:
