@@ -513,19 +513,19 @@ export default function SchedulePage() {
       {/* Grid */}
       <div className="border border-border/50 rounded-xl overflow-hidden shadow-md bg-card">
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse" style={{ minWidth: 700 }}>
+          <table className="w-full table-fixed border-collapse">
             <thead>
               <tr className="bg-muted/50 border-b border-border/50">
-                <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur w-28 min-w-[110px] text-left px-3 py-3 text-xs uppercase tracking-wider font-mono text-muted-foreground border-r border-border/50">
-                  Staff
+                <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur w-9 sm:w-28 min-w-[36px] sm:min-w-[110px] text-left px-1 sm:px-3 py-3 text-xs uppercase tracking-wider font-mono text-muted-foreground border-r border-border/50">
+                  <span className="hidden sm:inline">Staff</span>
                 </th>
                 {weekDates.map((d, i) => {
                   const isToday = format(new Date(), "yyyy-MM-dd") === format(d, "yyyy-MM-dd");
                   return (
-                    <th key={i} className={`py-3 px-1 text-center text-xs uppercase tracking-wider font-mono border-r last:border-r-0 border-border/30 ${isToday ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
-                      <div className="font-bold">{DAYS[i]}</div>
-                      <div className={`text-base font-bold mt-0.5 ${isToday ? "text-primary" : "text-foreground"}`}>{format(d, "d")}</div>
-                      <div className="text-[10px] opacity-60 font-normal">{format(d, "MMM")}</div>
+                    <th key={i} className={`py-2 sm:py-3 px-0 sm:px-1 text-center text-[9px] sm:text-xs uppercase tracking-wider font-mono border-r last:border-r-0 border-border/30 ${isToday ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+                      <div className="font-bold">{DAYS[i].slice(0, 1)}<span className="hidden sm:inline">{DAYS[i].slice(1)}</span></div>
+                      <div className={`text-sm sm:text-base font-bold mt-0.5 ${isToday ? "text-primary" : "text-foreground"}`}>{format(d, "d")}</div>
+                      <div className="hidden sm:block text-[10px] opacity-60 font-normal">{format(d, "MMM")}</div>
                     </th>
                   );
                 })}
@@ -534,12 +534,12 @@ export default function SchedulePage() {
             <tbody className="divide-y divide-border/30">
               {employees.map(emp => (
                 <tr key={emp.id} className="group hover:bg-muted/10 transition-colors">
-                  <td className="sticky left-0 z-10 bg-card border-r border-border/50 px-3 py-2 w-28 min-w-[110px]">
+                  <td className="sticky left-0 z-10 bg-card border-r border-border/50 px-1 sm:px-3 py-2 w-9 sm:w-28 min-w-[36px] sm:min-w-[110px]">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-[11px] font-bold text-primary flex-shrink-0">
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-primary/20 flex items-center justify-center text-[9px] sm:text-[11px] font-bold text-primary flex-shrink-0">
                         {emp.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 hidden sm:block">
                         <div className="font-semibold text-xs truncate">{emp.name.split(" ")[0]}</div>
                         <div className="text-[10px] text-muted-foreground capitalize">{emp.role}</div>
                       </div>
@@ -553,7 +553,7 @@ export default function SchedulePage() {
                     const isPendingLeave = leave?.status === "pending";
                     return (
                       <td key={i} className={`border-r last:border-r-0 border-border/30 align-top p-1 ${getCellBg(emp.id, dateStr)}`}>
-                        <div className="flex flex-col gap-0.5 min-h-[64px]">
+                          <div className="flex flex-col gap-0.5 min-h-[52px]">
                           {isApprovedLeave && (
                             <div className="flex items-center gap-1 px-1 py-0.5 bg-red-500/15 text-red-600 dark:text-red-400 rounded text-[10px] font-semibold border border-red-400/30">
                               <Ban className="w-2.5 h-2.5 flex-shrink-0" />
@@ -578,7 +578,7 @@ export default function SchedulePage() {
                                 ? (selectMode ? toggleShiftSelected(shift.id) : openEdit(shift))
                                 : (shift.status === "published" ? setViewShift(shift) : undefined)
                               }
-                              className={`relative w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager || shift.status === "published" ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                              className={`relative w-full text-left text-[9px] sm:text-[11px] font-semibold px-1 sm:px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager || shift.status === "published" ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
                             >
                               {selectMode && isManager && (
                                 <span className="absolute top-0.5 right-0.5">
@@ -587,8 +587,8 @@ export default function SchedulePage() {
                                     : <Square className="w-3 h-3 text-muted-foreground/50" />}
                                 </span>
                               )}
-                              <div className="truncate">{fmtTime(shift.startTime!)}–{fmtTime(shift.endTime!)}</div>
-                              {shift.status === "draft" && <div className="text-[9px] font-normal opacity-60 uppercase tracking-widest">Draft</div>}
+                              <div className="leading-snug">{fmtTime(shift.startTime!)}<br/>–{fmtTime(shift.endTime!)}</div>
+                              {shift.status === "draft" && <div className="text-[8px] sm:text-[9px] font-normal opacity-60 uppercase tracking-widest">Draft</div>}
                             </button>
                           ))}
                           {isManager && !isApprovedLeave && (
@@ -610,8 +610,8 @@ export default function SchedulePage() {
               {/* Unassigned row */}
               {isManager && (
                 <tr className="group bg-muted/20 hover:bg-muted/30 transition-colors">
-                  <td className="sticky left-0 z-10 bg-muted/40 border-r border-border/50 px-3 py-2">
-                    <div className="text-[10px] font-semibold text-muted-foreground font-mono uppercase tracking-wider">Open Shifts</div>
+                  <td className="sticky left-0 z-10 bg-muted/40 border-r border-border/50 px-1 sm:px-3 py-2 w-9 sm:w-28">
+                    <div className="text-[8px] sm:text-[10px] font-semibold text-muted-foreground font-mono uppercase tracking-wider leading-tight">Open<br className="sm:hidden"/> Shifts</div>
                   </td>
                   {weekDates.map((d, i) => {
                     const dateStr = format(d, "yyyy-MM-dd");
@@ -623,7 +623,7 @@ export default function SchedulePage() {
                             <button
                               key={shift.id}
                               onClick={() => selectMode ? toggleShiftSelected(shift.id) : openEdit(shift)}
-                              className={`relative w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                              className={`relative w-full text-left text-[9px] sm:text-[11px] font-semibold px-1 sm:px-1.5 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
                             >
                               {selectMode && (
                                 <span className="absolute top-0.5 right-0.5">
@@ -632,7 +632,7 @@ export default function SchedulePage() {
                                     : <Square className="w-3 h-3 text-muted-foreground/50" />}
                                 </span>
                               )}
-                              <div className="truncate">{fmtTime(shift.startTime!)}–{fmtTime(shift.endTime!)}</div>
+                              <div className="leading-snug">{fmtTime(shift.startTime!)}<br/>–{fmtTime(shift.endTime!)}</div>
                             </button>
                           ))}
                           <button

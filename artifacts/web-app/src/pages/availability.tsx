@@ -131,13 +131,13 @@ export default function AvailabilityPage() {
                         key={dateStr}
                         onClick={() => toggle(dateStr)}
                         className={`flex flex-col items-center justify-center p-2 sm:p-4 rounded-xl border-2 transition-all cursor-pointer select-none ${isAvailable
-                          ? 'bg-primary/15 border-primary text-primary shadow-sm'
+                          ? 'bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-400 shadow-sm'
                           : 'bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60'
-                          } ${isToday ? 'ring-2 ring-primary/30' : ''}`}
+                          } ${isToday ? 'ring-2 ring-emerald-500/30' : ''}`}
                       >
                         <span className="text-xs font-semibold uppercase tracking-wider">{DAY_LABELS[i]}</span>
                         <span className="text-lg sm:text-xl font-bold mt-1">{format(d, 'd')}</span>
-                        <span className={`text-[10px] mt-1 font-mono ${isAvailable ? 'text-primary' : 'text-muted-foreground/50'}`}>
+                        <span className={`text-[10px] mt-1 font-mono ${isAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/50'}`}>
                           {isAvailable ? '✓' : '–'}
                         </span>
                       </button>
@@ -183,13 +183,13 @@ export default function AvailabilityPage() {
                           key={dateStr}
                           onClick={() => toggle(dateStr)}
                           className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 transition-all cursor-pointer select-none ${isAvailable
-                            ? 'bg-primary/15 border-primary text-primary shadow-sm'
+                            ? 'bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-400 shadow-sm'
                             : 'bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60'
-                            } ${isToday ? 'ring-2 ring-primary/30' : ''}`}
+                            } ${isToday ? 'ring-2 ring-emerald-500/30' : ''}`}
                         >
                           <span className="text-xs font-semibold uppercase tracking-wider">{DAY_LABELS[i]}</span>
                           <span className="text-base sm:text-lg font-bold mt-1">{format(d, 'd')}</span>
-                          <span className={`text-[10px] mt-1 font-mono ${isAvailable ? 'text-primary' : 'text-muted-foreground/50'}`}>
+                          <span className={`text-[10px] mt-1 font-mono ${isAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/50'}`}>
                             {isAvailable ? '✓' : '–'}
                           </span>
                         </button>
