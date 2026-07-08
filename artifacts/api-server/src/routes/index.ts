@@ -35,6 +35,16 @@ const contactSchema = z.object({
   message: z.string().min(1),
 });
 
+/** Escape user-supplied strings so they are safe inside HTML email bodies. */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 router.post("/contact", async (req, res) => {
   const parsed = contactSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -43,6 +53,10 @@ router.post("/contact", async (req, res) => {
   }
 
   const { name, email, company, message } = parsed.data;
+  const safeName    = escHtml(name);
+  const safeEmail   = escHtml(email);
+  const safeCompany = company ? escHtml(company) : null;
+  const safeMessage = escHtml(message).replace(/\n/g, "<br>");
 
   // Send email via env-configured SMTP
   try {
@@ -65,13 +79,13 @@ router.post("/contact", async (req, res) => {
       <p style="color:#666;font-size:11px;margin:0;letter-spacing:2px;text-transform:uppercase;">New Website Enquiry</p>
     </div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-      <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;width:120px;">Name</td><td style="padding:8px 0;font-size:14px;color:#111;">${name}</td></tr>
-      <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Email</td><td style="padding:8px 0;font-size:14px;"><a href="mailto:${email}" style="color:#e11d48;">${email}</a></td></tr>
-      ${company ? `<tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Company</td><td style="padding:8px 0;font-size:14px;color:#111;">${company}</td></tr>` : ""}
+      <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;width:120px;">Name</td><td style="padding:8px 0;font-size:14px;color:#111;">${safeName}</td></tr>
+      <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Email</td><td style="padding:8px 0;font-size:14px;"><a href="mailto:${safeEmail}" style="color:#e11d48;">${safeEmail}</a></td></tr>
+      ${safeCompany ? `<tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Company</td><td style="padding:8px 0;font-size:14px;color:#111;">${safeCompany}</td></tr>` : ""}
     </table>
     <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-bottom:24px;">
       <p style="font-size:13px;color:#555;font-weight:600;margin:0 0 8px;">Message</p>
-      <p style="font-size:14px;color:#222;line-height:1.6;margin:0;white-space:pre-wrap;">${message}</p>
+      <p style="font-size:14px;color:#222;line-height:1.6;margin:0;">${safeMessage}</p>
     </div>
     <p style="color:#aaa;font-size:11px;text-align:center;margin:0;">Submitted via SYNTRA website enquiry form</p>
   </div>
@@ -81,7 +95,7 @@ router.post("/contact", async (req, res) => {
       await sendEmail(
         { host: smtpHost, port: smtpPort, secure: false, user: smtpUser, pass: smtpPass, from: emailFrom },
         emailTo,
-        `New SYNTRA Enquiry from ${name}${company ? ` (${company})` : ""}`,
+        `New SYNTRA Enquiry from ${safeName}${safeCompany ? ` (${safeCompany})` : ""}`,
         html,
       );
     }

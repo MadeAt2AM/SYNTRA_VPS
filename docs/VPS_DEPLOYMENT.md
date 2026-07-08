@@ -224,12 +224,17 @@ cd /opt/syntra
 # Pull latest code
 git pull
 
-# Rebuild and restart (zero-downtime if unchanged services are cached)
+# Rebuild and restart all services (cached layers make this fast when unchanged)
 docker compose up -d --build
 
-# Run migrations if the schema changed
-docker compose run --rm migrate
+# If the database schema changed (new columns, tables, etc.), rebuild and run
+# the migration image explicitly — the "migration" profile is not started by default
+docker compose build migrate
+docker compose run --rm --profile migration migrate
 ```
+
+> **When do you need to run migrations?**  
+> Any time `lib/db/src/schema/` files change. If you are unsure, running migrations when they are not needed is safe — drizzle-kit push is idempotent.
 
 ---
 

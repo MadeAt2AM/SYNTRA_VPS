@@ -10,13 +10,17 @@ export interface SmtpConfig {
 }
 
 function buildTransport(smtp: SmtpConfig) {
-  const isGmail = smtp.host.toLowerCase().includes("gmail");
   return nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
     auth: { user: smtp.user, pass: smtp.pass },
-    tls: isGmail ? undefined : { rejectUnauthorized: false },
+    // TLS certificate validation is enforced by default.
+    // Only disable if your SMTP host uses a self-signed cert AND you
+    // explicitly set SMTP_REJECT_UNAUTHORIZED=false in your environment.
+    tls: {
+      rejectUnauthorized: process.env["SMTP_REJECT_UNAUTHORIZED"] !== "false",
+    },
   });
 }
 
