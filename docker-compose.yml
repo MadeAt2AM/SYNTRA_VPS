@@ -4,6 +4,14 @@
 # Start:   docker compose up -d --build
 # Logs:    docker compose logs -f
 # Stop:    docker compose down
+#
+# ── Network topology ──────────────────────────────────────────────────────────
+#   private  (MTU 1400) : postgres <-> api   <─ isolated DB traffic (Hetzner fix)
+#   web      (external) : api, web          <─ shared with Caddy reverse proxy
+#
+# The `web` network is the existing project network created by the deploy host
+# (see deploy/docker-compose.web.yml). api and web attach to both `private` and
+# `web`; postgres only attaches to `private`. This keeps DB off the proxy net.
 
 services:
 
@@ -18,6 +26,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - private
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U syntra -d syntra"]
       interval: 10s
@@ -34,6 +44,8 @@ services:
     container_name: syntra_migrate
     environment:
       DATABASE_URL: postgresql://syntra:${POSTGRES_PASSWORD}@postgres:5432/syntra
+    networks:
+      - private
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +84,9 @@ services:
       # self-signed TLS certificate. Leave unset (or "true") in production.
       SMTP_REJECT_UNAUTHORIZED: ${SMTP_REJECT_UNAUTHORIZED:-true}
 
+    networks:
+      - private
+      - web
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,11 +104,30 @@ services:
       dockerfile: Dockerfile.web
     container_name: syntra_web
     restart: unless-stopped
-    ports:
-      - "80:80"
+    # No host port mapping — Caddy reverse-proxies via the shared `web` network
+    # (see /srv/caddy/sites/syntra.caddy on the host).
+    networks:
+      web:
+        aliases:
+          - syntra-app
+      private:
+        aliases:
+          - syntra-app
     depends_on:
       api:
         condition: service_healthy
+
+networks:
+  # Private DB network — MTU 1400 to match Hetzner eth0 (fixes SMTP/TLS hangs)
+  private:
+    name: syntra_syntra-net
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
+  # Public-facing network shared with the Caddy reverse proxy
+  web:
+    name: web
+    external: true
 
 volumes:
   postgres_data:
