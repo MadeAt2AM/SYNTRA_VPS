@@ -170,6 +170,22 @@ export const timeLogs = pgTable("time_logs", {
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type InsertTimeLog = typeof timeLogs.$inferInsert;
 
+// ─── Shift Presets ───────────────────────────────────────────────────────────
+
+export const shiftPresets = pgTable("shift_presets", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  startTime: text("start_time").notNull(), // "HH:MM"
+  endTime: text("end_time").notNull(),     // "HH:MM"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type ShiftPreset = typeof shiftPresets.$inferSelect;
+export type InsertShiftPreset = typeof shiftPresets.$inferInsert;
+
 // ─── Invitations ─────────────────────────────────────────────────────────────
 
 export const invitations = pgTable("invitations", {

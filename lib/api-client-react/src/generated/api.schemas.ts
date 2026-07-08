@@ -293,9 +293,27 @@ export interface TimeLog {
   createdAt?: string;
 }
 
+export interface ShiftPreset {
+  id: number;
+  companyId: number;
+  name: string;
+  /** HH:MM */
+  startTime: string;
+  /** HH:MM */
+  endTime: string;
+  createdAt: string;
+}
+
+export interface ShiftPresetRequest {
+  name: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface ClockInRequest {
   shiftId?: number | null;
-  locationValid?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface ClockOutRequest {

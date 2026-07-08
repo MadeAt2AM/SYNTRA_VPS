@@ -10,6 +10,7 @@ import availabilityRouter from "./availability";
 import leaveRequestsRouter from "./leave-requests";
 import timeLogsRouter from "./time-logs";
 import invitationsRouter from "./invitations";
+import shiftPresetsRouter from "./shift-presets";
 import { z } from "zod";
 import { sendEmail } from "../lib/email";
 
@@ -26,11 +27,13 @@ router.use("/availability", availabilityRouter);
 router.use("/leave-requests", leaveRequestsRouter);
 router.use("/time-logs", timeLogsRouter);
 router.use("/invitations", invitationsRouter);
+router.use("/shift-presets", shiftPresetsRouter);
 
 // Public contact/enquiry endpoint
 const contactSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
+  phone: z.string().min(1),
   company: z.string().optional(),
   message: z.string().min(1),
 });
@@ -52,9 +55,10 @@ router.post("/contact", async (req, res) => {
     return;
   }
 
-  const { name, email, company, message } = parsed.data;
+  const { name, email, phone, company, message } = parsed.data;
   const safeName    = escHtml(name);
   const safeEmail   = escHtml(email);
+  const safePhone   = escHtml(phone);
   const safeCompany = company ? escHtml(company) : null;
   const safeMessage = escHtml(message).replace(/\n/g, "<br>");
 
@@ -81,6 +85,7 @@ router.post("/contact", async (req, res) => {
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
       <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;width:120px;">Name</td><td style="padding:8px 0;font-size:14px;color:#111;">${safeName}</td></tr>
       <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Email</td><td style="padding:8px 0;font-size:14px;"><a href="mailto:${safeEmail}" style="color:#e11d48;">${safeEmail}</a></td></tr>
+      <tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Phone / WhatsApp</td><td style="padding:8px 0;font-size:14px;"><a href="tel:${safePhone}" style="color:#e11d48;">${safePhone}</a></td></tr>
       ${safeCompany ? `<tr><td style="padding:8px 0;font-size:13px;color:#555;font-weight:600;">Company</td><td style="padding:8px 0;font-size:14px;color:#111;">${safeCompany}</td></tr>` : ""}
     </table>
     <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-bottom:24px;">

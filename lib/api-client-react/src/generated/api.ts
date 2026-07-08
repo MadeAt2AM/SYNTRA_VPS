@@ -38,6 +38,8 @@ import type {
   NotFoundResponse,
   RegisterRequest,
   Shift,
+  ShiftPreset,
+  ShiftPresetRequest,
   ShiftRequest,
   TimeLog,
   UnauthorizedResponse,
@@ -2426,6 +2428,223 @@ export const useClockOut = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getClockOutMutationOptions(options));
+    }
+
+export const getListShiftPresetsUrl = () => {
+
+
+
+
+  return `/api/shift-presets`
+}
+
+/**
+ * @summary List shift presets for the company
+ */
+export const listShiftPresets = async ( options?: RequestInit): Promise<ShiftPreset[]> => {
+
+  return customFetch<ShiftPreset[]>(getListShiftPresetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListShiftPresetsQueryKey = () => {
+    return [
+    `/api/shift-presets`
+    ] as const;
+    }
+
+
+export const getListShiftPresetsQueryOptions = <TData = Awaited<ReturnType<typeof listShiftPresets>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listShiftPresets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListShiftPresetsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listShiftPresets>>> = ({ signal }) => listShiftPresets({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listShiftPresets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListShiftPresetsQueryResult = NonNullable<Awaited<ReturnType<typeof listShiftPresets>>>
+export type ListShiftPresetsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List shift presets for the company
+ */
+
+export function useListShiftPresets<TData = Awaited<ReturnType<typeof listShiftPresets>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listShiftPresets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListShiftPresetsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateShiftPresetUrl = () => {
+
+
+
+
+  return `/api/shift-presets`
+}
+
+/**
+ * @summary Create a shift preset (admin/manager)
+ */
+export const createShiftPreset = async (shiftPresetRequest: ShiftPresetRequest, options?: RequestInit): Promise<ShiftPreset> => {
+
+  return customFetch<ShiftPreset>(getCreateShiftPresetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(shiftPresetRequest)
+  }
+);}
+
+
+
+
+export const getCreateShiftPresetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createShiftPreset>>, TError,{data: BodyType<ShiftPresetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createShiftPreset>>, TError,{data: BodyType<ShiftPresetRequest>}, TContext> => {
+
+const mutationKey = ['createShiftPreset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createShiftPreset>>, {data: BodyType<ShiftPresetRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createShiftPreset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateShiftPresetMutationResult = NonNullable<Awaited<ReturnType<typeof createShiftPreset>>>
+    export type CreateShiftPresetMutationBody = BodyType<ShiftPresetRequest>
+    export type CreateShiftPresetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a shift preset (admin/manager)
+ */
+export const useCreateShiftPreset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createShiftPreset>>, TError,{data: BodyType<ShiftPresetRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createShiftPreset>>,
+        TError,
+        {data: BodyType<ShiftPresetRequest>},
+        TContext
+      > => {
+      return useMutation(getCreateShiftPresetMutationOptions(options));
+    }
+
+export const getDeleteShiftPresetUrl = (id: number,) => {
+
+
+
+
+  return `/api/shift-presets/${id}`
+}
+
+/**
+ * @summary Delete a shift preset (admin/manager)
+ */
+export const deleteShiftPreset = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteShiftPresetUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteShiftPresetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteShiftPreset>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteShiftPreset>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteShiftPreset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteShiftPreset>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteShiftPreset(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteShiftPresetMutationResult = NonNullable<Awaited<ReturnType<typeof deleteShiftPreset>>>
+
+    export type DeleteShiftPresetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a shift preset (admin/manager)
+ */
+export const useDeleteShiftPreset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteShiftPreset>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteShiftPreset>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteShiftPresetMutationOptions(options));
     }
 
 export const getListInvitationsUrl = () => {

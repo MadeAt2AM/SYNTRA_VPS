@@ -6,8 +6,8 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface ClockInRequest {
-  shiftId?: number | null;
-  latitude?: number | null;
-  longitude?: number | null;
+export interface ShiftPresetRequest {
+  name: string;
+  startTime: string;
+  endTime: string;
 }

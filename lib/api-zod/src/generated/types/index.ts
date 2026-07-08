@@ -37,6 +37,8 @@ export * from './loginRequest';
 export * from './notFoundResponse';
 export * from './registerRequest';
 export * from './shift';
+export * from './shiftPreset';
+export * from './shiftPresetRequest';
 export * from './shiftRequest';
 export * from './shiftRequestStatus';
 export * from './shiftStatus';

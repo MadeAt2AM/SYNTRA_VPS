@@ -4,17 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Users, Clock, Shield, BarChart3, Smartphone, CheckCircle2, ArrowRight, Mail, Building } from "lucide-react";
+import { CalendarDays, Users, Clock, Shield, BarChart3, Smartphone, CheckCircle2, ArrowRight, Mail, Building, Phone } from "lucide-react";
 
 export default function LandingPage() {
   const { toast } = useToast();
-  const [form, setForm] = useState({ name: "", email: "", company: "", message: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.email || !form.message) return;
+    if (!form.name || !form.email || !form.phone || !form.message) return;
     setSubmitting(true);
     try {
       const res = await fetch("/api/contact", {
@@ -183,25 +183,45 @@ export default function LandingPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold">Work Email *</label>
-                  <Input
-                    type="email"
-                    placeholder="jane@company.com"
-                    value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                    required
-                  />
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      placeholder="jane@company.com"
+                      className="pl-9"
+                      value={form.email}
+                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold">Company / Organisation</label>
-                <div className="relative">
-                  <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Acme Corporation"
-                    className="pl-9"
-                    value={form.company}
-                    onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold">Phone / WhatsApp *</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="tel"
+                      placeholder="+1 555 000 0000"
+                      className="pl-9"
+                      value={form.phone}
+                      onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold">Company / Organisation</label>
+                  <div className="relative">
+                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Acme Corporation"
+                      className="pl-9"
+                      value={form.company}
+                      onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
               <div className="space-y-1.5">

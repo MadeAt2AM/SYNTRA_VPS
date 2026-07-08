@@ -1,18 +1,34 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { timeLogs, shifts, users } from "@workspace/db";
+import { timeLogs, shifts, users, workplaces } from "@workspace/db";
 import { eq, and, isNull, isNotNull, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { parseId } from "../lib/parse-id";
 import { z } from "zod";
 import { format } from "date-fns";
 
+/** Haversine distance in meters between two lat/lng points */
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const dPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const dLambda = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dPhi / 2) * Math.sin(dPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 const router = Router();
 router.use(requireAuth);
 
 const clockInSchema = z.object({
   shiftId: z.number().int().positive().optional().nullable(),
-  locationValid: z.boolean().optional(),
+  // locationValid is intentionally NOT accepted from the client — derived server-side only
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
 });
 
 const employeeClockOutSchema = z.object({
@@ -135,17 +151,62 @@ router.post("/", async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  if (parsed.data.shiftId != null) {
+
+  const now = new Date();
+  // locationValid is always false until server-side geofence check confirms it
+  let locationValid = false;
+  let payrollIn: Date | null = null;
+  let resolvedShiftId: number | null = parsed.data.shiftId ?? null;
+
+  // Validate shift: must belong to company AND be assigned to the clocking-in employee
+  if (resolvedShiftId != null) {
     const [shift] = await db
-      .select({ id: shifts.id })
+      .select()
       .from(shifts)
-      .where(and(eq(shifts.id, parsed.data.shiftId), eq(shifts.companyId, companyId)))
+      .where(
+        and(
+          eq(shifts.id, resolvedShiftId),
+          eq(shifts.companyId, companyId),
+          eq(shifts.employeeId, userId),
+        ),
+      )
       .limit(1);
     if (!shift) {
-      res.status(400).json({ error: "Shift not found in this company" });
+      res.status(400).json({ error: "Shift not found or not assigned to you" });
       return;
     }
+
+    // ── Location verification ──────────────────────────────────────────────
+    // If shift has a workplace and the employee sent their coordinates, compute
+    // distance and auto-set locationValid.
+    if (shift.workplaceId != null && parsed.data.latitude != null && parsed.data.longitude != null) {
+      const [wp] = await db
+        .select()
+        .from(workplaces)
+        .where(eq(workplaces.id, shift.workplaceId))
+        .limit(1);
+
+      if (wp && wp.latitude != null && wp.longitude != null) {
+        const dist = haversineDistance(
+          parsed.data.latitude,
+          parsed.data.longitude,
+          parseFloat(wp.latitude),
+          parseFloat(wp.longitude),
+        );
+        locationValid = dist <= wp.radiusMeters;
+      }
+    }
+
+    // ── Auto payroll start time ────────────────────────────────────────────
+    // If clocking in within 10 minutes of shift start, use shift start as payrollIn
+    const shiftStart = new Date(shift.startTime);
+    const diffMs = now.getTime() - shiftStart.getTime();
+    const diffMins = diffMs / 60000; // positive = clocked in AFTER shift start
+    if (diffMins >= -10 && diffMins <= 10) {
+      payrollIn = shiftStart;
+    }
   }
+
   const [open] = await db
     .select({ id: timeLogs.id })
     .from(timeLogs)
@@ -155,9 +216,17 @@ router.post("/", async (req, res) => {
     res.status(409).json({ error: "Already clocked in", openLogId: open.id });
     return;
   }
+
   const [log] = await db
     .insert(timeLogs)
-    .values({ employeeId: userId, companyId, actualIn: new Date(), shiftId: parsed.data.shiftId ?? null, locationValid: parsed.data.locationValid ?? false })
+    .values({
+      employeeId: userId,
+      companyId,
+      actualIn: now,
+      shiftId: resolvedShiftId,
+      locationValid,
+      payrollIn,
+    })
     .returning();
   res.status(201).json(log);
 });

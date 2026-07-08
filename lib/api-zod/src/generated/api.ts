@@ -633,7 +633,8 @@ export const ListTimeLogsResponse = zod.array(ListTimeLogsResponseItem)
  */
 export const ClockInBody = zod.object({
   "shiftId": zod.number().nullish(),
-  "locationValid": zod.boolean().optional()
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish()
 })
 
 export const ClockInResponse = zod.object({
@@ -712,6 +713,49 @@ export const ClockOutResponse = zod.object({
   "paid": zod.boolean(),
   "createdAt": zod.coerce.date().optional()
 })
+
+
+/**
+ * @summary List shift presets for the company
+ */
+export const ListShiftPresetsResponseItem = zod.object({
+  "id": zod.number(),
+  "companyId": zod.number(),
+  "name": zod.string(),
+  "startTime": zod.string().describe('HH:MM'),
+  "endTime": zod.string().describe('HH:MM'),
+  "createdAt": zod.coerce.date()
+})
+export const ListShiftPresetsResponse = zod.array(ListShiftPresetsResponseItem)
+
+
+/**
+ * @summary Create a shift preset (admin/manager)
+ */
+export const CreateShiftPresetBody = zod.object({
+  "name": zod.string(),
+  "startTime": zod.string(),
+  "endTime": zod.string()
+})
+
+export const CreateShiftPresetResponse = zod.object({
+  "id": zod.number(),
+  "companyId": zod.number(),
+  "name": zod.string(),
+  "startTime": zod.string().describe('HH:MM'),
+  "endTime": zod.string().describe('HH:MM'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a shift preset (admin/manager)
+ */
+export const DeleteShiftPresetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteShiftPresetResponse = zod.void()
 
 
 /**

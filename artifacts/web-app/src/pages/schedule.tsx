@@ -2,10 +2,11 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   useListShifts, useListUsers, useListWorkplaces, useListLeaveRequests, useListAvailability,
   useCreateShift, useUpdateShift, useDeleteShift,
+  useListShiftPresets, useCreateShiftPreset, useDeleteShiftPreset,
   getListShiftsQueryKey, getListUsersQueryKey, getListWorkplacesQueryKey,
-  getListLeaveRequestsQueryKey, getListAvailabilityQueryKey
+  getListLeaveRequestsQueryKey, getListAvailabilityQueryKey, getListShiftPresetsQueryKey,
 } from "@workspace/api-client-react";
-import type { Shift, UserProfile, Workplace, LeaveRequest } from "@workspace/api-client-react";
+import type { Shift, LeaveRequest } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfWeek, addDays, addWeeks, subWeeks, parseISO } from "date-fns";
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send, RotateCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send, RotateCcw, Clock, Settings2, X } from "lucide-react";
 import { TimePicker } from "@/components/ui/time-picker";
 import { apiCheckLeave } from "@/lib/platform-api";
 
@@ -36,7 +37,6 @@ function getWeekDates(weekStart: Date) {
 }
 
 function fmtTime(iso: string) {
-  // Extract time directly from ISO string to avoid timezone conversion
   const timePart = iso.includes("T") ? iso.split("T")[1] : iso;
   const [hStr, mStr] = timePart.split(":");
   const h = parseInt(hStr, 10);
@@ -65,18 +65,27 @@ export default function SchedulePage() {
   const [leaveWarning, setLeaveWarning] = useState<{ hasPending?: boolean; leaveType?: string } | null>(null);
   const [formValues, setFormValues] = useState({ startTime: "09:00", endTime: "17:00", workplaceId: "", role: "", notes: "" });
   const [publishing, setPublishing] = useState(false);
+  const [publishingId, setPublishingId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reverting, setReverting] = useState(false);
+
+  // Preset management state
+  const [showPresets, setShowPresets] = useState(false);
+  const [newPreset, setNewPreset] = useState({ name: "", startTime: "09:00", endTime: "17:00" });
+  const [savingPreset, setSavingPreset] = useState(false);
 
   const { data: shifts = [] } = useListShifts({ query: { enabled: !!user?.companyId, queryKey: getListShiftsQueryKey() } });
   const { data: users = [] } = useListUsers({ query: { enabled: !!user?.companyId, queryKey: getListUsersQueryKey() } });
   const { data: workplaces = [] } = useListWorkplaces({ query: { enabled: !!user?.companyId, queryKey: getListWorkplacesQueryKey() } });
   const { data: leaveRequests = [] } = useListLeaveRequests({ query: { enabled: !!user?.companyId, queryKey: getListLeaveRequestsQueryKey() } });
   const { data: availabilityList = [] } = useListAvailability({ query: { enabled: !!user?.companyId, queryKey: getListAvailabilityQueryKey() } });
+  const { data: presets = [] } = useListShiftPresets({ query: { enabled: !!user?.companyId && isManager, queryKey: getListShiftPresetsQueryKey() } });
 
   const createShift = useCreateShift();
   const updateShift = useUpdateShift();
   const deleteShift = useDeleteShift();
+  const createPreset = useCreateShiftPreset();
+  const deletePreset = useDeleteShiftPreset();
 
   const employees = useMemo(
     () => users.filter(u => u.role !== "platform_admin" && (isManager ? true : u.id === user?.id)),
@@ -87,7 +96,6 @@ export default function SchedulePage() {
     const map = new Map<string, Shift[]>();
     for (const shift of shifts) {
       if (!shift.startTime) continue;
-      // Extract date directly from ISO string to avoid timezone conversion
       const dateStr = shift.startTime.includes("T")
         ? shift.startTime.split("T")[0]
         : format(new Date(shift.startTime), "yyyy-MM-dd");
@@ -143,7 +151,6 @@ export default function SchedulePage() {
   }
 
   function openEdit(shift: Shift) {
-    // Extract date/time parts directly from ISO string to avoid timezone conversion
     const dateStr = shift.startTime!.includes("T")
       ? shift.startTime!.split("T")[0]
       : format(new Date(shift.startTime!), "yyyy-MM-dd");
@@ -164,6 +171,10 @@ export default function SchedulePage() {
     });
     setLeaveWarning(null);
     setModal({ open: true, mode: "edit", employeeId: shift.employeeId || null, date: dateStr, shift });
+  }
+
+  function applyPreset(startTime: string, endTime: string) {
+    setFormValues(f => ({ ...f, startTime, endTime }));
   }
 
   async function handleSubmit() {
@@ -233,6 +244,23 @@ export default function SchedulePage() {
     });
   }
 
+  async function handlePublishSingle() {
+    if (!modal.shift) return;
+    setPublishingId(modal.shift.id);
+    updateShift.mutate({ id: modal.shift.id, data: { status: "published" } as any }, {
+      onSuccess: () => {
+        toast({ title: "Shift published" });
+        qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+        setModal(m => ({ ...m, open: false }));
+        setPublishingId(null);
+      },
+      onError: () => {
+        toast({ title: "Failed to publish", variant: "destructive" });
+        setPublishingId(null);
+      }
+    });
+  }
+
   async function publishAll() {
     const draftShifts = shifts.filter(s => s.status === "draft");
     if (!draftShifts.length) {
@@ -249,6 +277,35 @@ export default function SchedulePage() {
     } finally {
       setPublishing(false);
     }
+  }
+
+  async function handleSavePreset() {
+    if (!newPreset.name.trim()) return;
+    setSavingPreset(true);
+    createPreset.mutate(
+      { data: { name: newPreset.name.trim(), startTime: newPreset.startTime, endTime: newPreset.endTime } },
+      {
+        onSuccess: () => {
+          toast({ title: "Preset saved" });
+          qc.invalidateQueries({ queryKey: getListShiftPresetsQueryKey() });
+          setNewPreset({ name: "", startTime: "09:00", endTime: "17:00" });
+          setSavingPreset(false);
+        },
+        onError: () => {
+          toast({ title: "Failed to save preset", variant: "destructive" });
+          setSavingPreset(false);
+        }
+      }
+    );
+  }
+
+  function handleDeletePreset(id: number) {
+    deletePreset.mutate({ id }, {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListShiftPresetsQueryKey() });
+        toast({ title: "Preset deleted" });
+      }
+    });
   }
 
   function getCellBg(empId: number, dateStr: string) {
@@ -283,14 +340,81 @@ export default function SchedulePage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          {isManager && (
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-mono" onClick={() => setShowPresets(p => !p)}>
+              <Settings2 className="h-3.5 w-3.5" />
+              Presets
+            </Button>
+          )}
           {isManager && draftCount > 0 && (
             <Button size="sm" className="font-semibold gap-1.5" onClick={publishAll} disabled={publishing}>
               <Send className="h-3.5 w-3.5" />
-              {publishing ? "Publishing..." : `Publish ${draftCount} Draft${draftCount > 1 ? "s" : ""}`}
+              {publishing ? "Publishing..." : `Publish All ${draftCount} Draft${draftCount > 1 ? "s" : ""}`}
             </Button>
           )}
         </div>
       </div>
+
+      {/* Preset Panel (managers only) */}
+      {isManager && showPresets && (
+        <div className="border border-border/60 rounded-xl bg-card/80 backdrop-blur shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Shift Presets</h3>
+              <span className="text-xs text-muted-foreground font-mono">(click when adding a shift to auto-fill times)</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowPresets(false)}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* Existing presets */}
+          <div className="flex flex-wrap gap-2">
+            {presets.length === 0 && (
+              <span className="text-xs text-muted-foreground italic">No presets yet. Add one below.</span>
+            )}
+            {presets.map(p => (
+              <div key={p.id} className="flex items-center gap-1 px-2.5 py-1 bg-primary/8 border border-primary/20 rounded-full text-xs font-semibold group">
+                <Clock className="h-3 w-3 text-primary/70" />
+                <span>{p.name}</span>
+                <span className="text-muted-foreground font-normal font-mono">{p.startTime}–{p.endTime}</span>
+                <button
+                  onClick={() => handleDeletePreset(p.id)}
+                  className="ml-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add new preset */}
+          <div className="flex flex-wrap items-end gap-2 pt-1 border-t border-border/40">
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Name</Label>
+              <Input
+                placeholder="e.g. Morning, Afternoon"
+                value={newPreset.name}
+                onChange={e => setNewPreset(p => ({ ...p, name: e.target.value }))}
+                className="h-8 text-sm w-40"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Start</Label>
+              <TimePicker value={newPreset.startTime} onChange={v => setNewPreset(p => ({ ...p, startTime: v }))} label="Start" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">End</Label>
+              <TimePicker value={newPreset.endTime} onChange={v => setNewPreset(p => ({ ...p, endTime: v }))} label="End" />
+            </div>
+            <Button size="sm" onClick={handleSavePreset} disabled={savingPreset || !newPreset.name.trim()} className="h-8 gap-1.5 text-xs">
+              <Plus className="h-3 w-3" />
+              {savingPreset ? "Saving..." : "Save Preset"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -452,6 +576,26 @@ export default function SchedulePage() {
             </DialogDescription>
           </DialogHeader>
 
+          {/* Quick preset selector */}
+          {presets.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Quick Presets</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {presets.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => applyPreset(p.startTime, p.endTime)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-border/60 bg-muted/40 hover:bg-primary/10 hover:border-primary/40 text-xs font-semibold transition-all"
+                  >
+                    <Clock className="h-2.5 w-2.5 text-primary/70" />
+                    {p.name}
+                    <span className="text-muted-foreground font-normal font-mono">{p.startTime}–{p.endTime}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {leaveWarning?.hasPending && (
             <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-400/30 rounded-lg p-3 text-sm">
               <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
@@ -519,6 +663,17 @@ export default function SchedulePage() {
               <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting} className="sm:mr-auto">
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
                 {deleting ? "Deleting..." : "Delete"}
+              </Button>
+            )}
+            {modal.mode === "edit" && modal.shift?.status === "draft" && isManager && (
+              <Button
+                variant="outline" size="sm"
+                onClick={handlePublishSingle}
+                disabled={publishingId === modal.shift?.id}
+                className="gap-1.5 text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {publishingId === modal.shift?.id ? "Publishing..." : "Publish Shift"}
               </Button>
             )}
             {modal.mode === "edit" && modal.shift?.status === "published" && isManager && (
