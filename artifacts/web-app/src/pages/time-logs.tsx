@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, formatDistanceStrict } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
-import { Clock, Play, Square, Download } from "lucide-react";
+import { Clock, Play, Square, Download, CheckCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
@@ -16,6 +16,7 @@ export default function TimeLogsPage() {
   const { toast } = useToast();
   const [exportPeriod, setExportPeriod] = useState<"week" | "month">("month");
   const [exporting, setExporting] = useState(false);
+  const [settling, setSettling] = useState(false);
 
   const { data: logs = [], isLoading } = useListTimeLogs({ query: { enabled: !!user, queryKey: getListTimeLogsQueryKey() } });
   const { data: users = [] } = useListUsers({ query: { enabled: !!user && user.role !== 'employee', queryKey: getListUsersQueryKey() } });
@@ -40,6 +41,29 @@ export default function TimeLogsPage() {
       }
     });
   };
+
+  async function handleSettleAll() {
+    setSettling(true);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`/api/time-logs/settle-period`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ period: exportPeriod }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: getListTimeLogsQueryKey() });
+      toast({
+        title: `${data.settled} log${data.settled !== 1 ? "s" : ""} marked as paid`,
+        description: `All unpaid ${exportPeriod === "week" ? "this week" : "this month"} are now settled.`,
+      });
+    } catch {
+      toast({ title: "Settle failed", variant: "destructive" });
+    } finally {
+      setSettling(false);
+    }
+  }
 
   async function handleExport() {
     setExporting(true);
@@ -78,7 +102,7 @@ export default function TimeLogsPage() {
           <p className="text-muted-foreground mt-1 font-mono text-xs uppercase tracking-widest">Clock in and out</p>
         </div>
         {isManager && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Select value={exportPeriod} onValueChange={(v: any) => setExportPeriod(v)}>
               <SelectTrigger className="w-32 h-9">
                 <SelectValue />
@@ -88,9 +112,15 @@ export default function TimeLogsPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
+            {user?.role === "admin" && (
+              <Button variant="outline" size="sm" className="font-semibold gap-1.5 text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/20" onClick={handleSettleAll} disabled={settling}>
+                <CheckCheck className="h-4 w-4" />
+                {settling ? "Settling..." : "Settle All"}
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="font-semibold gap-1.5" onClick={handleExport} disabled={exporting}>
               <Download className="h-4 w-4" />
-              {exporting ? "Exporting..." : "Export Payroll CSV"}
+              {exporting ? "Exporting..." : "Export CSV"}
             </Button>
           </div>
         )}

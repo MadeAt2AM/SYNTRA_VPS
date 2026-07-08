@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { timeLogs, shifts, users } from "@workspace/db";
-import { eq, and, isNull, gte, lte } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { parseId } from "../lib/parse-id";
 import { z } from "zod";
@@ -146,6 +146,53 @@ router.post("/", async (req, res) => {
     .values({ employeeId: userId, companyId, actualIn: new Date(), shiftId: parsed.data.shiftId ?? null, locationValid: parsed.data.locationValid ?? false })
     .returning();
   res.status(201).json(log);
+});
+
+// POST /api/time-logs/settle-period — bulk mark all unpaid completed logs as paid (admin only)
+router.post("/settle-period", requireRole("admin"), async (req, res) => {
+  const { companyId } = req.auth!;
+  if (!companyId) {
+    res.status(400).json({ error: "No company associated with this account" });
+    return;
+  }
+
+  const parsed = z.object({ period: z.enum(["week", "month"]) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "period must be 'week' or 'month'" });
+    return;
+  }
+
+  const now = new Date();
+  let startDate: Date;
+  let endDate: Date;
+
+  if (parsed.data.period === "week") {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    startDate = new Date(now.getFullYear(), now.getMonth(), diff, 0, 0, 0, 0);
+    endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+  } else {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
+
+  const result = await db
+    .update(timeLogs)
+    .set({ paid: true })
+    .where(
+      and(
+        eq(timeLogs.companyId, companyId),
+        eq(timeLogs.paid, false),
+        isNotNull(timeLogs.actualOut),
+        gte(timeLogs.actualIn, startDate),
+        lte(timeLogs.actualIn, endDate),
+      ),
+    )
+    .returning({ id: timeLogs.id });
+
+  res.json({ settled: result.length });
 });
 
 // GET /api/time-logs/:id

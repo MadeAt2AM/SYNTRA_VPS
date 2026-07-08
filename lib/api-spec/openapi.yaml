@@ -1143,7 +1143,7 @@ components:
       properties:
         status:
           type: string
-          enum: [approved, rejected]
+          enum: [pending, approved, rejected]
         startDate:
           type: string
         endDate:

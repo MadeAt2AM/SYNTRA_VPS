@@ -35,7 +35,14 @@ function getWeekDates(weekStart: Date) {
 }
 
 function fmtTime(iso: string) {
-  return format(new Date(iso), "h:mma");
+  // Extract time directly from ISO string to avoid timezone conversion
+  const timePart = iso.includes("T") ? iso.split("T")[1] : iso;
+  const [hStr, mStr] = timePart.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const period = h >= 12 ? "pm" : "am";
+  const displayH = h % 12 || 12;
+  return `${displayH}:${String(m).padStart(2, "0")}${period}`;
 }
 
 function getShiftStatusClass(status: string) {
@@ -79,7 +86,10 @@ export default function SchedulePage() {
     const map = new Map<string, Shift[]>();
     for (const shift of shifts) {
       if (!shift.startTime) continue;
-      const dateStr = format(new Date(shift.startTime), "yyyy-MM-dd");
+      // Extract date directly from ISO string to avoid timezone conversion
+      const dateStr = shift.startTime.includes("T")
+        ? shift.startTime.split("T")[0]
+        : format(new Date(shift.startTime), "yyyy-MM-dd");
       const key = `${shift.employeeId ?? "unassigned"}:${dateStr}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(shift);
@@ -132,10 +142,21 @@ export default function SchedulePage() {
   }
 
   function openEdit(shift: Shift) {
-    const dateStr = format(new Date(shift.startTime!), "yyyy-MM-dd");
+    // Extract date/time parts directly from ISO string to avoid timezone conversion
+    const dateStr = shift.startTime!.includes("T")
+      ? shift.startTime!.split("T")[0]
+      : format(new Date(shift.startTime!), "yyyy-MM-dd");
+    const startTimePart = shift.startTime!.includes("T")
+      ? shift.startTime!.split("T")[1].slice(0, 5)
+      : format(new Date(shift.startTime!), "HH:mm");
+    const endTimePart = shift.endTime
+      ? shift.endTime.includes("T")
+        ? shift.endTime.split("T")[1].slice(0, 5)
+        : format(new Date(shift.endTime), "HH:mm")
+      : "17:00";
     setFormValues({
-      startTime: format(new Date(shift.startTime!), "HH:mm"),
-      endTime: shift.endTime ? format(new Date(shift.endTime), "HH:mm") : "17:00",
+      startTime: startTimePart,
+      endTime: endTimePart,
       workplaceId: shift.workplaceId?.toString() || "",
       role: shift.role || "",
       notes: shift.notes || "",

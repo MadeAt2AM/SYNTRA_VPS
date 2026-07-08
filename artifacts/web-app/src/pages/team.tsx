@@ -118,7 +118,7 @@ export default function TeamPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          {!isOwnAccount && canManage ? (
+                          {!isOwnAccount && isAdmin ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -126,22 +126,18 @@ export default function TeamPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                {isAdmin && (
-                                  member.status === 'active' ? (
-                                    <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'inactive', member.role)}>
-                                      <UserX className="w-4 h-4 mr-2" /> Deactivate
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'active', member.role)}>
-                                      <UserCheck className="w-4 h-4 mr-2" /> Activate
-                                    </DropdownMenuItem>
-                                  )
-                                )}
-                                {isAdmin && (
-                                  <DropdownMenuItem onClick={() => handleDelete(member.id)} className="text-destructive">
-                                    <UserX className="w-4 h-4 mr-2" /> Delete
+                                {member.status === 'active' ? (
+                                  <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'inactive', member.role)}>
+                                    <UserX className="w-4 h-4 mr-2" /> Deactivate
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={() => handleUpdateStatus(member.id, 'active', member.role)}>
+                                    <UserCheck className="w-4 h-4 mr-2" /> Activate
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem onClick={() => handleDelete(member.id)} className="text-destructive">
+                                  <UserX className="w-4 h-4 mr-2" /> Delete
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           ) : (

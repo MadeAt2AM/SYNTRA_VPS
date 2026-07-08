@@ -10,6 +10,7 @@ import { Layout } from "@/components/layout";
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
+import AcceptInvitePage from "@/pages/accept-invite";
 import DashboardPage from "@/pages/dashboard";
 import PlatformPage from "@/pages/platform";
 import SchedulePage from "@/pages/schedule";
@@ -111,9 +112,13 @@ function Router() {
           <GuestOnly><LoginPage /></GuestOnly>
         </Route>
 
-        {/* Disabled: no self-registration */}
+        {/* Self-registration disabled; invitation-based onboarding via /accept-invite */}
         <Route path="/register">
           <Redirect to="/login" />
+        </Route>
+
+        <Route path="/accept-invite">
+          <GuestOnly><AcceptInvitePage /></GuestOnly>
         </Route>
 
         <Route path="/change-password">

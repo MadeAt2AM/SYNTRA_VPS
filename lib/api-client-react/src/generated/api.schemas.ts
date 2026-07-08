@@ -253,6 +253,7 @@ export type LeaveRequestUpdateStatus = typeof LeaveRequestUpdateStatus[keyof typ
 
 
 export const LeaveRequestUpdateStatus = {
+  pending: 'pending',
   approved: 'approved',
   rejected: 'rejected',
 } as const;

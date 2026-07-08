@@ -84,7 +84,7 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
       const appUrl = process.env["REPLIT_DEV_DOMAIN"]
         ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
         : `${req.protocol}://${req.get("host")}`;
-      const inviteUrl = `${appUrl}/register?token=${token}&email=${encodeURIComponent(parsed.data.email)}`;
+      const inviteUrl = `${appUrl}/accept-invite?token=${token}&email=${encodeURIComponent(parsed.data.email)}`;
       const roleLabel = targetRole.charAt(0).toUpperCase() + targetRole.slice(1);
 
       const html = `

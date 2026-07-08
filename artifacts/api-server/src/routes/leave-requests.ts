@@ -17,7 +17,7 @@ const createLeaveSchema = z.object({
 });
 
 const reviewSchema = z.object({
-  status: z.enum(["approved", "rejected"]),
+  status: z.enum(["approved", "rejected", "pending"]),
 });
 
 // GET /api/leave-requests

@@ -584,7 +584,7 @@ export const UpdateLeaveRequestParams = zod.object({
 })
 
 export const UpdateLeaveRequestBody = zod.object({
-  "status": zod.enum(['approved', 'rejected']).optional(),
+  "status": zod.enum(['pending', 'approved', 'rejected']).optional(),
   "startDate": zod.string().optional(),
   "endDate": zod.string().optional(),
   "type": zod.enum(['annual', 'sick', 'unpaid', 'other']).optional(),

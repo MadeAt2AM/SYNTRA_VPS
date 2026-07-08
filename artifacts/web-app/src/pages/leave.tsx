@@ -14,7 +14,7 @@ import * as z from "zod";
 import { useState } from "react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
-import { Briefcase, Plus, Check, X } from "lucide-react";
+import { Briefcase, Plus, Check, X, RotateCcw } from "lucide-react";
 
 const leaveSchema = z.object({
   startDate: z.string().min(1, "Required"),
@@ -42,14 +42,14 @@ export default function LeavePage() {
       onSuccess: () => {
         setOpen(false);
         form.reset();
-        queryClient.invalidateQueries({ queryKey: ['/api/leave-requests'] });
+        queryClient.invalidateQueries({ queryKey: getListLeaveRequestsQueryKey() });
       }
     });
   }
 
-  const handleStatusUpdate = (id: number, status: 'approved' | 'rejected') => {
+  const handleStatusUpdate = (id: number, status: 'approved' | 'rejected' | 'pending') => {
     updateRequest.mutate({ id, data: { status } }, {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/leave-requests'] })
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListLeaveRequestsQueryKey() })
     });
   };
 
@@ -201,7 +201,7 @@ export default function LeavePage() {
                         </TableCell>
                         {user?.role !== 'employee' && (
                           <TableCell className="text-right">
-                            {req.status === 'pending' && (
+                            {req.status === 'pending' ? (
                               <div className="flex justify-end gap-2">
                                 <Button size="sm" variant="outline" className="h-8 w-8 p-0 text-green-600" onClick={() => handleStatusUpdate(req.id, 'approved')}>
                                   <Check className="w-4 h-4" />
@@ -210,6 +210,11 @@ export default function LeavePage() {
                                   <X className="w-4 h-4" />
                                 </Button>
                               </div>
+                            ) : (
+                              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground gap-1 hover:text-foreground" onClick={() => handleStatusUpdate(req.id, 'pending')}>
+                                <RotateCcw className="w-3 h-3" />
+                                Revert
+                              </Button>
                             )}
                           </TableCell>
                         )}
