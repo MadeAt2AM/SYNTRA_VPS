@@ -287,6 +287,8 @@ export interface TimeLog {
   payrollOut?: string | null;
   locationValid: boolean;
   validatedHours?: string | null;
+  managerValidated: boolean;
+  managerValidatedAt?: string | null;
   paid: boolean;
   createdAt?: string;
 }
@@ -302,6 +304,7 @@ export interface ClockOutRequest {
   payrollIn?: string | null;
   payrollOut?: string | null;
   validatedHours?: string | null;
+  managerValidated?: boolean;
   paid?: boolean;
 }
 

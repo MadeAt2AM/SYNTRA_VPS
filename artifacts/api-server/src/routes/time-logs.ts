@@ -26,6 +26,7 @@ const managerUpdateSchema = z.object({
   payrollIn: z.string().optional().nullable(),
   payrollOut: z.string().optional().nullable(),
   validatedHours: z.string().optional().nullable(),
+  managerValidated: z.boolean().optional(),
   paid: z.boolean().optional(),
 });
 
@@ -79,7 +80,7 @@ router.get("/export-csv", requireRole("admin", "manager"), async (req, res) => {
   const userMap = new Map(allUsers.map(u => [u.id, u]));
 
   const csvRows = [
-    ["Employee", "Email", "Date", "Clock In", "Clock Out", "Hours", "Validated Hours", "Hourly Rate", "Estimated Pay", "Paid"].join(","),
+    ["Employee", "Email", "Date", "Clock In", "Clock Out", "Hours", "Validated Hours", "Validation", "Hourly Rate", "Estimated Pay", "Paid"].join(","),
   ];
 
   for (const log of logs) {
@@ -92,14 +93,27 @@ router.get("/export-csv", requireRole("admin", "manager"), async (req, res) => {
     const hours = log.actualOut
       ? ((new Date(log.actualOut).getTime() - new Date(log.actualIn).getTime()) / 3600000).toFixed(2)
       : "";
+
+    // Either location-based or manager-approved validation counts
+    const isValidated = log.locationValid || log.managerValidated;
+    const validationLabel = log.locationValid && log.managerValidated
+      ? "Both"
+      : log.locationValid
+      ? "Location"
+      : log.managerValidated
+      ? "Manager"
+      : "None";
+
     const validatedHours = log.validatedHours ?? hours;
     const hourlyRate = emp?.hourlyRate ?? "0";
-    const estimatedPay = validatedHours && hourlyRate
+
+    // Only compute estimated pay for validated logs
+    const estimatedPay = isValidated && validatedHours && hourlyRate
       ? (parseFloat(validatedHours) * parseFloat(hourlyRate)).toFixed(2)
       : "";
     const paid = log.paid ? "Yes" : "No";
 
-    csvRows.push([empName, empEmail, date, clockIn, clockOut, hours, validatedHours, hourlyRate, estimatedPay, paid].join(","));
+    csvRows.push([empName, empEmail, date, clockIn, clockOut, hours, validatedHours, validationLabel, hourlyRate, estimatedPay, paid].join(","));
   }
 
   const csv = csvRows.join("\n");
@@ -267,6 +281,10 @@ router.put("/:id", async (req, res) => {
   const updates: Record<string, unknown> = {};
   if (parsed.data.locationValid !== undefined) updates.locationValid = parsed.data.locationValid;
   if (parsed.data.validatedHours !== undefined) updates.validatedHours = parsed.data.validatedHours;
+  if (parsed.data.managerValidated !== undefined) {
+    updates.managerValidated = parsed.data.managerValidated;
+    updates.managerValidatedAt = parsed.data.managerValidated ? new Date() : null;
+  }
   if (parsed.data.paid !== undefined) updates.paid = parsed.data.paid;
   const actualOut = toDate(parsed.data.actualOut);
   if (actualOut !== undefined) updates.actualOut = actualOut;

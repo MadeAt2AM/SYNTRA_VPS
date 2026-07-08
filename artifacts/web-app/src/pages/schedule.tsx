@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { format, startOfWeek, addDays, addWeeks, subWeeks, parseISO } from "date-fns";
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send, RotateCcw } from "lucide-react";
+import { TimePicker } from "@/components/ui/time-picker";
 import { apiCheckLeave } from "@/lib/platform-api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -492,11 +493,11 @@ export default function SchedulePage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Start Time</Label>
-                <Input type="time" value={formValues.startTime} onChange={e => setFormValues(f => ({ ...f, startTime: e.target.value }))} className="h-9" />
+                <TimePicker value={formValues.startTime} onChange={v => setFormValues(f => ({ ...f, startTime: v }))} label="Start Time" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">End Time</Label>
-                <Input type="time" value={formValues.endTime} onChange={e => setFormValues(f => ({ ...f, endTime: e.target.value }))} className="h-9" />
+                <TimePicker value={formValues.endTime} onChange={v => setFormValues(f => ({ ...f, endTime: v }))} label="End Time" />
               </div>
             </div>
 

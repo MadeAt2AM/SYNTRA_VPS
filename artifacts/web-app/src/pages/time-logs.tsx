@@ -4,11 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, formatDistanceStrict } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
-import { Clock, Play, Square, Download, CheckCheck } from "lucide-react";
+import { Clock, Play, Square, Download, CheckCheck, ShieldCheck, ShieldOff, MapPin, UserCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 export default function TimeLogsPage() {
   const { user } = useAuth();
@@ -17,6 +19,7 @@ export default function TimeLogsPage() {
   const [exportPeriod, setExportPeriod] = useState<"week" | "month">("month");
   const [exporting, setExporting] = useState(false);
   const [settling, setSettling] = useState(false);
+  const [validatingId, setValidatingId] = useState<number | null>(null);
 
   const { data: logs = [], isLoading } = useListTimeLogs({ query: { enabled: !!user, queryKey: getListTimeLogsQueryKey() } });
   const { data: users = [] } = useListUsers({ query: { enabled: !!user && user.role !== 'employee', queryKey: getListUsersQueryKey() } });
@@ -41,6 +44,30 @@ export default function TimeLogsPage() {
       }
     });
   };
+
+  async function handleToggleValidate(logId: number, currentlyValidated: boolean) {
+    setValidatingId(logId);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`/api/time-logs/${logId}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ managerValidated: !currentlyValidated }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      queryClient.invalidateQueries({ queryKey: getListTimeLogsQueryKey() });
+      toast({
+        title: !currentlyValidated ? "Log validated" : "Validation removed",
+        description: !currentlyValidated
+          ? "This time log is now approved for payroll."
+          : "Validation has been removed from this log.",
+      });
+    } catch {
+      toast({ title: "Action failed", variant: "destructive" });
+    } finally {
+      setValidatingId(null);
+    }
+  }
 
   async function handleSettleAll() {
     setSettling(true);
@@ -157,6 +184,19 @@ export default function TimeLogsPage() {
         </CardContent>
       </Card>
 
+      {/* Validation legend for managers */}
+      {isManager && (
+        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+          <span className="font-semibold uppercase tracking-widest mr-1">Validation:</span>
+          <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-emerald-500" /> Location verified</span>
+          <span className="flex items-center gap-1"><UserCheck className="h-3.5 w-3.5 text-blue-500" /> Manager approved</span>
+          <span className="flex items-center gap-1 opacity-50"><ShieldOff className="h-3.5 w-3.5" /> Not validated</span>
+          <span className="ml-auto text-[11px] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded px-2 py-0.5 font-mono">
+            Payroll CSV includes pay only for validated logs
+          </span>
+        </div>
+      )}
+
       <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur">
         <CardHeader>
           <CardTitle className="text-base">Recent Time Logs</CardTitle>
@@ -171,18 +211,24 @@ export default function TimeLogsPage() {
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Clock In</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Clock Out</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Duration</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider">Validation</TableHead>
                   {isManager && <TableHead className="font-mono text-xs uppercase tracking-wider">Paid</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
                 ) : filteredLogs.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No time logs found.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No time logs found.</TableCell></TableRow>
                 ) : (
                   filteredLogs.slice().reverse().map(log => {
                     const emp = users.find(u => u.id === log.employeeId);
                     const duration = log.actualOut ? formatDistanceStrict(new Date(log.actualIn), new Date(log.actualOut)) : '-';
+                    const locValid = log.locationValid;
+                    const mgrValid = log.managerValidated;
+                    const isValidated = locValid || mgrValid;
+                    const isValidating = validatingId === log.id;
+
                     return (
                       <TableRow key={log.id} className="hover:bg-muted/30">
                         {user?.role !== 'employee' && (
@@ -194,6 +240,69 @@ export default function TimeLogsPage() {
                           {log.actualOut ? format(new Date(log.actualOut), 'h:mm a') : <span className="text-accent animate-pulse font-semibold">Active</span>}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{duration}</TableCell>
+
+                        {/* Validation column */}
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {/* Status badges */}
+                            <div className="flex items-center gap-1">
+                              {locValid && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                                      <MapPin className="h-2.5 w-2.5" /> Loc
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Location verified at clock-in</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {mgrValid && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                                      <UserCheck className="h-2.5 w-2.5" /> Mgr
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Manager approved</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {!locValid && !mgrValid && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border border-border">
+                                  None
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Validate toggle button — managers & admins only, completed logs only */}
+                            {isManager && log.actualOut && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn(
+                                      "h-7 w-7 rounded-md transition-all",
+                                      mgrValid
+                                        ? "text-blue-500 hover:text-destructive hover:bg-destructive/10"
+                                        : "text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10"
+                                    )}
+                                    disabled={isValidating}
+                                    onClick={() => handleToggleValidate(log.id, !!mgrValid)}
+                                  >
+                                    {mgrValid
+                                      ? <ShieldCheck className="h-4 w-4" />
+                                      : <ShieldOff className="h-4 w-4" />
+                                    }
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {mgrValid ? "Remove manager validation" : "Approve this log for payroll"}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TableCell>
+
                         {isManager && (
                           <TableCell>
                             <span className={`px-2 py-0.5 rounded text-xs font-mono ${log.paid ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>

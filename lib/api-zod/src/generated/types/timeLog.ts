@@ -17,6 +17,8 @@ export interface TimeLog {
   payrollOut?: Date | null;
   locationValid: boolean;
   validatedHours?: string | null;
+  managerValidated: boolean;
+  managerValidatedAt?: Date | null;
   paid: boolean;
   createdAt?: Date;
 }

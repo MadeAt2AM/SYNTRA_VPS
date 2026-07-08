@@ -12,5 +12,6 @@ export interface ClockOutRequest {
   payrollIn?: Date | null;
   payrollOut?: Date | null;
   validatedHours?: string | null;
+  managerValidated?: boolean;
   paid?: boolean;
 }

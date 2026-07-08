@@ -620,6 +620,8 @@ export const ListTimeLogsResponseItem = zod.object({
   "payrollOut": zod.coerce.date().nullish(),
   "locationValid": zod.boolean(),
   "validatedHours": zod.string().nullish(),
+  "managerValidated": zod.boolean(),
+  "managerValidatedAt": zod.coerce.date().nullish(),
   "paid": zod.boolean(),
   "createdAt": zod.coerce.date().optional()
 })
@@ -645,6 +647,8 @@ export const ClockInResponse = zod.object({
   "payrollOut": zod.coerce.date().nullish(),
   "locationValid": zod.boolean(),
   "validatedHours": zod.string().nullish(),
+  "managerValidated": zod.boolean(),
+  "managerValidatedAt": zod.coerce.date().nullish(),
   "paid": zod.boolean(),
   "createdAt": zod.coerce.date().optional()
 })
@@ -668,6 +672,8 @@ export const GetTimeLogResponse = zod.object({
   "payrollOut": zod.coerce.date().nullish(),
   "locationValid": zod.boolean(),
   "validatedHours": zod.string().nullish(),
+  "managerValidated": zod.boolean(),
+  "managerValidatedAt": zod.coerce.date().nullish(),
   "paid": zod.boolean(),
   "createdAt": zod.coerce.date().optional()
 })
@@ -686,6 +692,7 @@ export const ClockOutBody = zod.object({
   "payrollIn": zod.coerce.date().nullish(),
   "payrollOut": zod.coerce.date().nullish(),
   "validatedHours": zod.string().nullish(),
+  "managerValidated": zod.boolean().optional(),
   "paid": zod.boolean().optional()
 })
 
@@ -700,6 +707,8 @@ export const ClockOutResponse = zod.object({
   "payrollOut": zod.coerce.date().nullish(),
   "locationValid": zod.boolean(),
   "validatedHours": zod.string().nullish(),
+  "managerValidated": zod.boolean(),
+  "managerValidatedAt": zod.coerce.date().nullish(),
   "paid": zod.boolean(),
   "createdAt": zod.coerce.date().optional()
 })

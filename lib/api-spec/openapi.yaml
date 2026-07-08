@@ -1189,12 +1189,18 @@ components:
         validatedHours:
           type: string
           nullable: true
+        managerValidated:
+          type: boolean
+        managerValidatedAt:
+          type: string
+          format: date-time
+          nullable: true
         paid:
           type: boolean
         createdAt:
           type: string
           format: date-time
-      required: [id, employeeId, companyId, actualIn, locationValid, paid]
+      required: [id, employeeId, companyId, actualIn, locationValid, managerValidated, paid]
 
     ClockInRequest:
       type: object
@@ -1225,6 +1231,8 @@ components:
         validatedHours:
           type: string
           nullable: true
+        managerValidated:
+          type: boolean
         paid:
           type: boolean
 

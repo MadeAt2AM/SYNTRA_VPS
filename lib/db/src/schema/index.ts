@@ -161,6 +161,8 @@ export const timeLogs = pgTable("time_logs", {
   payrollOut: timestamp("payroll_out"),
   locationValid: boolean("location_valid").notNull().default(false),
   validatedHours: numeric("validated_hours"),
+  managerValidated: boolean("manager_validated").notNull().default(false),
+  managerValidatedAt: timestamp("manager_validated_at"),
   paid: boolean("paid").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
