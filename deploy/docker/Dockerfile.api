@@ -38,6 +38,11 @@ RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"depende
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
+# Install wget for the healthcheck (bookworm-slim doesn't include BusyBox)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends wget ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 RUN addgroup --system syntra && adduser --system --ingroup syntra syntra
 
 COPY --from=builder /workspace/artifacts/api-server/dist ./dist
