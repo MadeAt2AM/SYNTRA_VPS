@@ -107,12 +107,12 @@ do_redeploy() {
     git config user.name  "MadeAt2AM Deployer" || true
     git config user.email "deploy@madeat2am.in"
   else
+    cd "$proj_dir"
     yellow "  → git fetch + reset to origin/main"
     if ! git fetch --depth=1 origin main 2>&1 | tail -3; then
       red "  ✗ fetch failed — likely GitHub auth issue"
       return 1
     fi
-    cd "$proj_dir"
     git reset --hard origin/main 2>&1 | tail -3
   fi
 
