@@ -1,11 +1,9 @@
-version: "3.9"
-
 # ── SYNTRA Docker Compose ──────────────────────────────────────────────────────
 # Runs three services: postgres, api (Express), web (nginx + React SPA)
 # Copy .env.example → .env and fill in your values before starting.
-# Start: docker compose up -d
-# Logs:  docker compose logs -f
-# Stop:  docker compose down
+# Start:   docker compose up -d --build
+# Logs:    docker compose logs -f
+# Stop:    docker compose down
 
 services:
 
@@ -27,7 +25,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── Database Migration (run once on first deploy) ───────────────────────────
+  # ── Database Migration (run once on first deploy, and after schema changes) ─
   # Usage: docker compose run --rm migrate
   migrate:
     build:
@@ -53,13 +51,27 @@ services:
       PORT:                 8080
       DATABASE_URL:         postgresql://syntra:${POSTGRES_PASSWORD}@postgres:5432/syntra
       SESSION_SECRET:       ${SESSION_SECRET}
-      # Contact form SMTP
-      CONTACT_SMTP_HOST:   ${CONTACT_SMTP_HOST:-mail.cyberslide.net}
-      CONTACT_SMTP_PORT:   ${CONTACT_SMTP_PORT:-587}
-      CONTACT_SMTP_USER:   ${CONTACT_SMTP_USER:-support@madeat2am.in}
-      CONTACT_SMTP_PASS:   ${CONTACT_SMTP_PASS}
-      CONTACT_EMAIL_TO:    ${CONTACT_EMAIL_TO:-chris@madeat2am.in}
-      CONTACT_EMAIL_FROM:  ${CONTACT_EMAIL_FROM:-SYNTRA Enquiries <support@madeat2am.in>}
+
+      # Public base URL — used to build password-reset links in emails.
+      # Set this to your domain (e.g. https://app.example.com).
+      # Without it, password-reset emails will contain a broken localhost URL.
+      APP_BASE_URL:         ${APP_BASE_URL}
+
+      # Contact form SMTP — used to forward landing-page enquiries.
+      CONTACT_SMTP_HOST:    ${CONTACT_SMTP_HOST:-mail.cyberslide.net}
+      CONTACT_SMTP_PORT:    ${CONTACT_SMTP_PORT:-587}
+      CONTACT_SMTP_USER:    ${CONTACT_SMTP_USER:-support@madeat2am.in}
+      CONTACT_SMTP_PASS:    ${CONTACT_SMTP_PASS}
+      CONTACT_EMAIL_TO:     ${CONTACT_EMAIL_TO:-chris@madeat2am.in}
+      CONTACT_EMAIL_FROM:   ${CONTACT_EMAIL_FROM:-SYNTRA Enquiries <support@madeat2am.in>}
+
+      # Optional — set to "debug" or "warn" to change log verbosity (default: info)
+      LOG_LEVEL:            ${LOG_LEVEL:-info}
+
+      # Optional — set to "false" only if your company SMTP server uses a
+      # self-signed TLS certificate. Leave unset (or "true") in production.
+      SMTP_REJECT_UNAUTHORIZED: ${SMTP_REJECT_UNAUTHORIZED:-true}
+
     depends_on:
       postgres:
         condition: service_healthy

@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /workspace
 
 # Enable corepack / pnpm
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 # Copy workspace config files first (layer caching)
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.json ./

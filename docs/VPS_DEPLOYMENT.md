@@ -13,11 +13,12 @@ Estimated time: **20–30 minutes** for a fresh server.
 4. [Configure Environment Variables](#4-configure-environment-variables)
 5. [First-Time Database Migration](#5-first-time-database-migration)
 6. [Start the Application](#6-start-the-application)
-7. [Set Up SSL with a Free Certificate (Caddy)](#7-set-up-ssl-with-a-free-certificate-caddy)
-8. [Useful Commands](#8-useful-commands)
-9. [Updating the Application](#9-updating-the-application)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Architecture Overview](#11-architecture-overview)
+7. [Create the First Platform Admin](#7-create-the-first-platform-admin)
+8. [Set Up SSL with a Free Certificate (Caddy)](#8-set-up-ssl-with-a-free-certificate-caddy)
+9. [Useful Commands](#9-useful-commands)
+10. [Updating the Application](#10-updating-the-application)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Architecture Overview](#12-architecture-overview)
 
 ---
 
@@ -43,7 +44,7 @@ SSH into your server and run:
 # Update packages
 sudo apt update && sudo apt upgrade -y
 
-# Install Docker (official script)
+# Install Docker (official script — includes Docker Compose V2)
 curl -fsSL https://get.docker.com | sudo sh
 
 # Add your user to the docker group (so you don't need sudo every time)
@@ -86,13 +87,21 @@ Fill in every value in `.env`:
 
 ```env
 # Strong random password for PostgreSQL
+# Generate: openssl rand -base64 32
 POSTGRES_PASSWORD=YourStrongPassword123!
 
 # Long random string for JWT signing
-# Generate one: openssl rand -base64 64
+# Generate: openssl rand -base64 64
 SESSION_SECRET=replace_with_very_long_random_secret
 
-# Contact form SMTP (emails enquiries to chris@madeat2am.in)
+# ⚠️  Required for password-reset emails to work correctly.
+# Set this to the public HTTPS URL of your SYNTRA instance (no trailing slash).
+# Without it, password-reset links in emails will point to localhost and not work.
+APP_BASE_URL=https://app.yourdomain.com
+
+# Contact form SMTP (optional — only needed if the landing-page contact form is used)
+# Note: per-company SMTP for staff emails is configured inside the app by each
+# company admin under Settings → Email, not here.
 CONTACT_SMTP_HOST=mail.cyberslide.net
 CONTACT_SMTP_PORT=587
 CONTACT_SMTP_USER=support@madeat2am.in
@@ -111,13 +120,13 @@ CONTACT_EMAIL_FROM=SYNTRA Enquiries <support@madeat2am.in>
 Before starting the app, create the database schema:
 
 ```bash
-# Run the migration container (exits after completing)
+# Run the migration container (starts postgres automatically, exits after completing)
 docker compose run --rm migrate
 ```
 
 This runs `drizzle-kit push` inside a temporary container, which creates all tables and indexes in PostgreSQL.
 
-> You only need to do this **once** on first deploy (and again if the schema changes).
+> You only need to do this **once** on first deploy. Run it again any time the schema changes (see [Updating the Application](#10-updating-the-application)).
 
 ---
 
@@ -135,15 +144,54 @@ You should see three running containers:
 
 | Container | Status | Description |
 |-----------|--------|-------------|
-| `syntra_postgres` | Up | PostgreSQL database |
+| `syntra_postgres` | Up (healthy) | PostgreSQL database |
 | `syntra_api` | Up (healthy) | Express API server |
-| `syntra_web` | Up (healthy) | Nginx + React SPA |
+| `syntra_web` | Up | Nginx + React SPA |
 
 The app will be accessible at **http://your-server-ip**.
 
 ---
 
-## 7. Set Up SSL with a Free Certificate (Caddy)
+## 7. Create the First Platform Admin
+
+SYNTRA has a `platform_admin` role — the operator account that can create and manage companies. There is no sign-up flow for this role; it must be created directly in the database.
+
+```bash
+# Open a PostgreSQL shell inside the running container
+docker compose exec postgres psql -U syntra -d syntra
+```
+
+Then run the following SQL (replace the values in quotes):
+
+```sql
+-- Generate a bcrypt hash for your chosen password first (see below), then insert:
+INSERT INTO users (email, name, password_hash, role, status, must_change_password)
+VALUES (
+  'admin@yourdomain.com',
+  'Platform Admin',
+  '$2b$12$REPLACE_WITH_BCRYPT_HASH',
+  'platform_admin',
+  'active',
+  false
+);
+```
+
+**To generate the bcrypt password hash**, run this on your server (outside psql):
+
+```bash
+docker compose exec api node -e "
+  const bcrypt = require('./node_modules/bcryptjs');
+  bcrypt.hash('YourChosenPassword', 12).then(h => console.log(h));
+"
+```
+
+Copy the output hash into the SQL above, then run the INSERT. Exit psql with `\q`.
+
+> **After first login**, the platform admin can create companies via the `/platform` section of the app, which provisions an admin user for each company with a temporary password.
+
+---
+
+## 8. Set Up SSL with a Free Certificate (Caddy)
 
 For HTTPS, use Caddy as a reverse proxy. It handles SSL certificates automatically via Let's Encrypt.
 
@@ -162,12 +210,12 @@ sudo apt install caddy
 Edit `/etc/caddy/Caddyfile`:
 
 ```caddyfile
-your-domain.com {
+app.yourdomain.com {
     reverse_proxy localhost:80
 }
 ```
 
-Replace `your-domain.com` with your actual domain name. Make sure your domain's DNS A record points to your server IP.
+Replace `app.yourdomain.com` with your actual domain. Make sure your domain's DNS A record points to your server IP.
 
 ```bash
 # Reload Caddy to apply the config and fetch the SSL cert
@@ -179,11 +227,16 @@ Caddy will automatically:
 - Renew it before it expires
 - Redirect HTTP → HTTPS
 
-Your app will now be accessible at **https://your-domain.com**.
+Your app will now be accessible at **https://app.yourdomain.com**.
+
+> **After setting up SSL**, update `APP_BASE_URL` in `.env` to your `https://` domain and restart the API:
+> ```bash
+> docker compose up -d api
+> ```
 
 ---
 
-## 8. Useful Commands
+## 9. Useful Commands
 
 ```bash
 # View live logs for all services
@@ -202,7 +255,7 @@ docker compose restart api
 # Stop everything
 docker compose down
 
-# Stop and remove volumes (⚠️ DELETES DATABASE DATA)
+# Stop and remove volumes (⚠️  DELETES ALL DATABASE DATA — use with care)
 docker compose down -v
 
 # Open a shell inside the API container
@@ -214,7 +267,7 @@ docker compose exec postgres psql -U syntra -d syntra
 
 ---
 
-## 9. Updating the Application
+## 10. Updating the Application
 
 When you push new code to your repository:
 
@@ -224,40 +277,63 @@ cd /opt/syntra
 # Pull latest code
 git pull
 
-# Rebuild and restart all services (cached layers make this fast when unchanged)
+# Rebuild images and restart all services
+# (Docker layer caching makes unchanged services fast)
 docker compose up -d --build
-
-# If the database schema changed (new columns, tables, etc.), rebuild and run
-# the migration image explicitly — the "migration" profile is not started by default
-docker compose build migrate
-docker compose run --rm --profile migration migrate
 ```
 
-> **When do you need to run migrations?**  
-> Any time `lib/db/src/schema/` files change. If you are unsure, running migrations when they are not needed is safe — drizzle-kit push is idempotent.
+### If the database schema changed
+
+Any time files under `lib/db/src/schema/` change, run the migration after pulling:
+
+```bash
+# Rebuild the migrate image, then run it
+docker compose build migrate
+docker compose run --rm migrate
+```
+
+> Running migrations when nothing changed is safe — `drizzle-kit push` is idempotent.
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### App shows a blank page
-- Check the web container logs: `docker compose logs web`
-- Make sure the `api` service is healthy: `docker compose ps`
+- Check web container logs: `docker compose logs web`
+- Confirm the API is healthy: `docker compose ps`
 - Test the API directly: `curl http://localhost:8080/api/healthz`
 
 ### Database connection errors
 - Check postgres is running: `docker compose ps postgres`
-- Verify `POSTGRES_PASSWORD` in `.env` is set and matches what postgres was started with
-- On a fresh server, wait ~15 seconds for postgres to finish initializing before the API connects
+- Verify `POSTGRES_PASSWORD` in `.env` matches what postgres was started with
+- On a fresh server, wait ~15 seconds for postgres to finish initializing
 
-### Email not sending from contact form
-- Verify SMTP credentials in `.env`
-- Test with: `docker compose exec api node -e "const n=require('nodemailer'); n.createTransport({host:'mail.cyberslide.net',port:587,auth:{user:'support@madeat2am.in',pass:'${CONTACT_SMTP_PASS}'}}).verify().then(()=>console.log('OK')).catch(console.error)"`
-- Check API logs: `docker compose logs api | grep Contact`
+### Password-reset emails not arriving
+- Confirm `APP_BASE_URL` in `.env` is set to your public HTTPS URL
+- Per-company SMTP (for staff password resets and invitations) is configured by each company admin inside the app under **Settings → Email**. The contact form SMTP in `.env` is separate and only used for landing-page enquiries.
+- Check API logs for SMTP errors: `docker compose logs api | grep -i smtp`
+
+### Contact form emails not sending
+- Verify `CONTACT_SMTP_*` credentials in `.env`
+- Test connectivity:
+  ```bash
+  docker compose exec api node -e "
+    const n = require('./node_modules/nodemailer');
+    n.createTransport({
+      host: process.env.CONTACT_SMTP_HOST,
+      port: Number(process.env.CONTACT_SMTP_PORT),
+      auth: { user: process.env.CONTACT_SMTP_USER, pass: process.env.CONTACT_SMTP_PASS }
+    }).verify().then(() => console.log('SMTP OK')).catch(console.error);
+  "
+  ```
+
+### SMTP TLS certificate errors (self-signed cert)
+- Add `SMTP_REJECT_UNAUTHORIZED=false` to `.env` and restart the API
+- Only use this if your SMTP provider uses a self-signed certificate
 
 ### Port 80 already in use
-- Another process is using port 80. Find it: `sudo lsof -i :80`
-- Stop it or change the SYNTRA port in `docker-compose.yml`: `"8080:80"`
+- Another process is using port 80: `sudo lsof -i :80`
+- Stop it, or change the port mapping in `docker-compose.yml`: `"8080:80"`
 
 ### Out of disk space
 ```bash
@@ -271,7 +347,7 @@ du -sh /var/lib/docker/volumes/
 
 ---
 
-## 11. Architecture Overview
+## 12. Architecture Overview
 
 ```
 Internet
@@ -305,14 +381,28 @@ Internet
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| `syntra_web` | Nginx + React | Serves the frontend SPA and proxies `/api/*` to the API |
-| `syntra_api` | Node.js + Express | Handles all business logic, auth, and database access |
-| `syntra_postgres` | PostgreSQL 16 | Persists all company, user, shift, leave, and time data |
-| Caddy | Caddy | Terminates HTTPS, renews Let's Encrypt certs automatically |
+| `syntra_web` | Nginx + React | Serves the frontend SPA; proxies `/api/*` to the API |
+| `syntra_api` | Node.js + Express 5 | Business logic, JWT auth, database access |
+| `syntra_postgres` | PostgreSQL 16 | Persists all application data |
+| Caddy | Caddy v2 | Terminates HTTPS, auto-renews Let's Encrypt certs |
+
+### Database tables
+
+| Table | Purpose |
+|-------|---------|
+| `companies` | Tenant records — name, plan, timezone, per-company SMTP config |
+| `users` | All users across all roles (platform_admin, admin, manager, employee) |
+| `workplaces` | Company locations with GPS coordinates and geofence radius |
+| `shifts` | Scheduled shifts (draft → published, assigned or open) |
+| `shift_presets` | Reusable time templates for faster shift creation |
+| `availability` | Employee weekly availability submissions |
+| `leave_requests` | Annual/sick leave requests and approval status |
+| `time_logs` | Clock-in/out records with GPS validation |
+| `invitations` | Token-based email invitations for onboarding staff |
 
 ### Data persistence
 
-PostgreSQL data is stored in a named Docker volume (`postgres_data`). This persists across container restarts and updates. **Back up this volume** regularly.
+PostgreSQL data is stored in a named Docker volume (`postgres_data`). This persists across container restarts and updates. **Back up this volume regularly.**
 
 ### Backup the database
 
@@ -324,6 +414,17 @@ docker compose exec postgres pg_dump -U syntra syntra > syntra_backup_$(date +%Y
 cat syntra_backup_20260708.sql | docker compose exec -T postgres psql -U syntra -d syntra
 ```
 
+### Per-company SMTP vs platform SMTP
+
+SYNTRA uses **two distinct SMTP configurations**:
+
+| SMTP | Where configured | Used for |
+|------|-----------------|----------|
+| **Platform SMTP** | `.env` (`CONTACT_SMTP_*`) | Landing-page contact form enquiries only |
+| **Company SMTP** | App UI — Settings → Email (stored in DB per company) | Staff invitations, password reset emails |
+
+Company admins configure their own SMTP server inside the app. Until they do, invitation and password-reset emails will not be sent even if the platform SMTP is configured.
+
 ---
 
-*Generated for SYNTRA Workforce Management Platform. For support, contact chris@madeat2am.in*
+*SYNTRA Workforce Management Platform — For support, contact chris@madeat2am.in*
