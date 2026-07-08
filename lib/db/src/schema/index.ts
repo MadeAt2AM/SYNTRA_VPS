@@ -46,6 +46,8 @@ export const users = pgTable("users", {
   phone: text("phone"),
   avatarUrl: text("avatar_url"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

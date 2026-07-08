@@ -9,6 +9,8 @@ import { Layout } from "@/components/layout";
 
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 import ChangePasswordPage from "@/pages/change-password";
 import AcceptInvitePage from "@/pages/accept-invite";
 import DashboardPage from "@/pages/dashboard";
@@ -110,6 +112,14 @@ function Router() {
 
         <Route path="/login">
           <GuestOnly><LoginPage /></GuestOnly>
+        </Route>
+
+        <Route path="/forgot-password">
+          <GuestOnly><ForgotPasswordPage /></GuestOnly>
+        </Route>
+
+        <Route path="/reset-password">
+          <GuestOnly><ResetPasswordPage /></GuestOnly>
         </Route>
 
         {/* Self-registration disabled; invitation-based onboarding via /accept-invite */}

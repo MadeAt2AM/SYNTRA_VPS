@@ -91,6 +91,8 @@ function ScrollCol({
     <div
       ref={ref}
       onScroll={handleScroll}
+      // Stop wheel events from bubbling to Radix Dialog which blocks them
+      onWheel={(e) => e.stopPropagation()}
       className={cn(
         "h-[180px] overflow-y-auto overscroll-contain",
         // Native scroll snapping keeps momentum/drag scrolling smooth while

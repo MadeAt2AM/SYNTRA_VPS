@@ -99,7 +99,10 @@ export default function LoginPage() {
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="flex flex-col items-center gap-2 border-t border-border/30 pt-5 mt-2">
+        <CardFooter className="flex flex-col items-center gap-3 border-t border-border/30 pt-5 mt-2">
+          <Link href="/forgot-password" className="text-xs text-primary font-semibold hover:underline">
+            Forgot your password?
+          </Link>
           <p className="text-xs text-muted-foreground text-center">
             Access is by invitation only. <Link href="/#enquire" className="text-primary font-semibold hover:underline">Contact us</Link> to get started.
           </p>

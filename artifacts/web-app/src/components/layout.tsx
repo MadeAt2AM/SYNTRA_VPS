@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 
-const PUBLIC_PATHS = ["/", "/login", "/register", "/change-password"];
+const PUBLIC_PATHS = ["/", "/login", "/register", "/change-password", "/forgot-password", "/reset-password"];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout, isLoading } = useAuth();
@@ -134,7 +134,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Menu size={20} />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col">
+              <SheetContent side="left" showClose={false} className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col">
                 {navContent(() => setMobileOpen(false))}
               </SheetContent>
             </Sheet>

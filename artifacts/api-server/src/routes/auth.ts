@@ -1,9 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { db } from "@workspace/db";
 import { users, invitations, companies } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, signToken } from "../middlewares/auth";
+import { sendEmail, SmtpConfig } from "../lib/email";
 import { z } from "zod";
 
 const router = Router();
@@ -260,6 +262,125 @@ router.post("/change-password", requireAuth, async (req, res) => {
     .returning({ id: users.id, mustChangePassword: users.mustChangePassword });
 
   res.json({ success: true, mustChangePassword: updated.mustChangePassword });
+});
+
+// Derive the trusted app base URL from environment (never from request headers).
+// In Replit, REPLIT_DOMAINS is a comma-separated list of public domains.
+function getAppBaseUrl(): string {
+  const domains = process.env["REPLIT_DOMAINS"];
+  if (domains) {
+    const first = domains.split(",")[0]?.trim();
+    if (first) return `https://${first}`;
+  }
+  const explicitBase = process.env["APP_BASE_URL"];
+  if (explicitBase) return explicitBase.replace(/\/$/, "");
+  // Last-resort dev fallback (non-public, same-host guess — acceptable for local dev only)
+  return `http://localhost:${process.env["PORT"] ?? 8080}`;
+}
+
+// POST /api/auth/forgot-password
+router.post("/forgot-password", async (req, res) => {
+  const parsed = z.object({ email: z.string().email() }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Valid email is required" });
+    return;
+  }
+
+  const email = parsed.data.email.toLowerCase();
+
+  // Always respond 200 so we don't reveal whether an account exists
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (user) {
+    // Generate a random token and store only its SHA-256 hash in the DB.
+    // The raw token is sent in the email; a DB leak won't expose usable tokens.
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiry = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+
+    await db
+      .update(users)
+      .set({ passwordResetToken: hashedToken, passwordResetExpiry: expiry })
+      .where(eq(users.id, user.id));
+
+    // Attempt to send email using the company's SMTP config
+    if (user.companyId) {
+      const [company] = await db
+        .select({ smtpConfig: companies.smtpConfig })
+        .from(companies)
+        .where(eq(companies.id, user.companyId))
+        .limit(1);
+
+      const smtp = company?.smtpConfig as SmtpConfig | null;
+      if (smtp?.host) {
+        const origin = getAppBaseUrl();
+        const resetUrl = `${origin}/reset-password?token=${rawToken}`;
+
+        const html = `
+          <p>Hi ${user.name},</p>
+          <p>You requested a password reset for your SYNTRA account.</p>
+          <p><a href="${resetUrl}" style="background:#e11d48;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;">Reset Password</a></p>
+          <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+          <p>— SYNTRA Workforce Management</p>
+        `;
+
+        try {
+          await sendEmail(smtp, user.email, "Reset your SYNTRA password", html);
+        } catch (err) {
+          req.log?.warn({ err }, "Failed to send password reset email");
+        }
+      }
+    }
+  }
+
+  res.json({ message: "If an account with that email exists, a reset link has been sent." });
+});
+
+// POST /api/auth/reset-password
+router.post("/reset-password", async (req, res) => {
+  const parsed = z.object({
+    token: z.string().min(1),
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const { token, newPassword } = parsed.data;
+
+  // Hash the incoming raw token and look up the hashed value in the DB
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.passwordResetToken, hashedToken))
+    .limit(1);
+
+  if (!user || !user.passwordResetExpiry || new Date(user.passwordResetExpiry).getTime() < Date.now()) {
+    res.status(400).json({ error: "This reset link is invalid or has expired. Please request a new one." });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      passwordResetToken: null,
+      passwordResetExpiry: null,
+      mustChangePassword: false,
+    })
+    .where(eq(users.id, user.id));
+
+  res.json({ success: true });
 });
 
 export default router;
