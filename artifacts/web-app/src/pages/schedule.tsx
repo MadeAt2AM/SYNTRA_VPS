@@ -516,7 +516,7 @@ export default function SchedulePage() {
           <table className="w-full table-fixed border-collapse">
             <thead>
               <tr className="bg-muted/50 border-b border-border/50">
-                <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur w-9 sm:w-28 min-w-[36px] sm:min-w-[110px] text-left px-1 sm:px-3 py-3 text-xs uppercase tracking-wider font-mono text-muted-foreground border-r border-border/50">
+                <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur w-16 sm:w-28 min-w-[64px] sm:min-w-[110px] text-left px-1 sm:px-3 py-3 text-xs uppercase tracking-wider font-mono text-muted-foreground border-r border-border/50">
                   <span className="hidden sm:inline">Staff</span>
                 </th>
                 {weekDates.map((d, i) => {
@@ -534,7 +534,7 @@ export default function SchedulePage() {
             <tbody className="divide-y divide-border/30">
               {employees.map(emp => (
                 <tr key={emp.id} className="group hover:bg-muted/10 transition-colors">
-                  <td className="sticky left-0 z-10 bg-card border-r border-border/50 px-1 sm:px-3 py-2 w-9 sm:w-28 min-w-[36px] sm:min-w-[110px]">
+                  <td className="sticky left-0 z-10 bg-card border-r border-border/50 px-1 sm:px-3 py-2 w-16 sm:w-28 min-w-[64px] sm:min-w-[110px]">
                     <div className="flex items-center gap-1.5">
                       <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-primary/20 flex items-center justify-center text-[9px] sm:text-[11px] font-bold text-primary flex-shrink-0">
                         {emp.name.slice(0, 2).toUpperCase()}
