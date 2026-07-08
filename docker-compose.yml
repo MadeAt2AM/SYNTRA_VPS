@@ -40,7 +40,7 @@ services:
   migrate:
     build:
       context: .
-      dockerfile: Dockerfile.migrate
+      dockerfile: deploy/docker/Dockerfile.migrate
     container_name: syntra_migrate
     environment:
       DATABASE_URL: postgresql://syntra:${POSTGRES_PASSWORD}@postgres:5432/syntra
@@ -55,7 +55,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: deploy/docker/Dockerfile.api
     container_name: syntra_api
     restart: unless-stopped
     environment:
@@ -101,7 +101,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.web
+      dockerfile: deploy/docker/Dockerfile.web
     container_name: syntra_web
     restart: unless-stopped
     # No host port mapping — Caddy reverse-proxies via the shared `web` network

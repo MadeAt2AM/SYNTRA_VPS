@@ -1,0 +1,56 @@
+# SYNTRA API Dockerfile — deploy target
+#
+# Modified from the upstream Dockerfile.api (Replit-targeted, alpine) to use
+# Debian-slim (glibc) so the @rollup/rollup-linux-x64-musl exclusion in
+# pnpm-workspace.yaml doesn't break the build.
+#
+# Same multi-stage shape as the original; just a base-image swap. Build context
+# is the repo root (so COPY ../../../lib works the same way).
+FROM node:20-bookworm-slim AS builder
+WORKDIR /workspace
+
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json tsconfig.json ./
+
+COPY lib/db/package.json                  ./lib/db/package.json
+COPY lib/db/tsconfig.json                 ./lib/db/tsconfig.json
+COPY lib/api-zod/package.json             ./lib/api-zod/package.json
+COPY lib/api-zod/tsconfig.json            ./lib/api-zod/tsconfig.json
+COPY lib/api-client-react/package.json    ./lib/api-client-react/package.json
+COPY lib/api-client-react/tsconfig.json   ./lib/api-client-react/tsconfig.json
+COPY lib/api-spec/package.json            ./lib/api-spec/package.json
+COPY artifacts/api-server/package.json    ./artifacts/api-server/package.json
+COPY artifacts/api-server/tsconfig.json   ./artifacts/api-server/tsconfig.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY lib/ ./lib/
+COPY artifacts/api-server/ ./artifacts/api-server/
+
+RUN pnpm --filter @workspace/api-server run build
+
+FROM node:20-bookworm-slim AS deps
+WORKDIR /runtime
+RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"dependencies":{"nodemailer":"^9.0.3"}}' > package.json \
+    && npm install --production --no-fund --no-audit
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+
+RUN addgroup --system syntra && adduser --system --ingroup syntra syntra
+
+COPY --from=builder /workspace/artifacts/api-server/dist ./dist
+COPY --from=deps /runtime/node_modules ./node_modules
+
+RUN chown -R syntra:syntra /app
+USER syntra
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:8080/api/healthz || exit 1
+
+CMD ["node", "--enable-source-maps", "dist/index.mjs"]
