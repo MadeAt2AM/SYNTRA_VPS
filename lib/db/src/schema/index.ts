@@ -23,6 +23,7 @@ export const companies = pgTable("companies", {
   timezone: text("timezone").notNull().default("UTC"),
   weekStartDay: integer("week_start_day").notNull().default(1),
   overtimeThreshold: numeric("overtime_threshold").notNull().default("40"),
+  smtpConfig: jsonb("smtp_config"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -44,6 +45,7 @@ export const users = pgTable("users", {
   hourlyRate: numeric("hourly_rate"),
   phone: text("phone"),
   avatarUrl: text("avatar_url"),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

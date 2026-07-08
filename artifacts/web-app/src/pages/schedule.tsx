@@ -1,335 +1,493 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useListShifts, useCreateShift, useUpdateShift, useDeleteShift, useListUsers, useListWorkplaces , getListUsersQueryKey, getListShiftsQueryKey, getListWorkplacesQueryKey} from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { useState } from "react";
+import {
+  useListShifts, useListUsers, useListWorkplaces, useListLeaveRequests, useListAvailability,
+  useCreateShift, useUpdateShift, useDeleteShift,
+  getListShiftsQueryKey, getListUsersQueryKey, getListWorkplacesQueryKey,
+  getListLeaveRequestsQueryKey, getListAvailabilityQueryKey
+} from "@workspace/api-client-react";
+import type { Shift, UserProfile, Workplace, LeaveRequest } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
-import { CalendarDays, Plus, ChevronLeft, ChevronRight, MapPin, User, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { format, startOfWeek, addDays, addWeeks, subWeeks, parseISO } from "date-fns";
+import { useState, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send } from "lucide-react";
+import { apiCheckLeave } from "@/lib/platform-api";
 
-const shiftSchema = z.object({
-  employeeId: z.coerce.number().optional().nullable(),
-  workplaceId: z.coerce.number().optional().nullable(),
-  startTimeDate: z.string().min(1, "Date required"),
-  startTimeTime: z.string().min(1, "Time required"),
-  endTimeDate: z.string().min(1, "Date required"),
-  endTimeTime: z.string().min(1, "Time required"),
-  role: z.string().optional(),
-  status: z.enum(['draft', 'published', 'cancelled']).default('published'),
-});
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+interface ShiftModal {
+  open: boolean;
+  mode: "create" | "edit";
+  employeeId: number | null;
+  date: string;
+  shift?: Shift;
+}
+
+function getWeekDates(weekStart: Date) {
+  return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+}
+
+function fmtTime(iso: string) {
+  return format(new Date(iso), "h:mma");
+}
+
+function getShiftStatusClass(status: string) {
+  if (status === "published") return "bg-primary/15 border-primary/40 text-primary";
+  if (status === "cancelled") return "bg-red-500/10 border-red-400/30 text-red-500 line-through";
+  return "bg-muted border-border/70 text-foreground";
+}
 
 export default function SchedulePage() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const { toast } = useToast();
-  
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [open, setOpen] = useState(false);
+  const isManager = user?.role === "admin" || user?.role === "manager";
 
-  const { data: shifts = [] } = useListShifts({ query: { enabled: !!user , queryKey: getListShiftsQueryKey() } });
-  const { data: users = [] } = useListUsers({ query: { enabled: !!user && user.role !== 'employee' , queryKey: getListUsersQueryKey() } });
-  const { data: workplaces = [] } = useListWorkplaces({ query: { enabled: !!user && user.role !== 'employee' , queryKey: getListWorkplacesQueryKey() } });
-  
+  const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const weekDates = getWeekDates(weekStart);
+
+  const [modal, setModal] = useState<ShiftModal>({ open: false, mode: "create", employeeId: null, date: "" });
+  const [leaveWarning, setLeaveWarning] = useState<{ hasPending?: boolean; leaveType?: string } | null>(null);
+  const [formValues, setFormValues] = useState({ startTime: "09:00", endTime: "17:00", workplaceId: "", role: "", notes: "" });
+  const [publishing, setPublishing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const { data: shifts = [] } = useListShifts({ query: { enabled: !!user?.companyId, queryKey: getListShiftsQueryKey() } });
+  const { data: users = [] } = useListUsers({ query: { enabled: !!user?.companyId, queryKey: getListUsersQueryKey() } });
+  const { data: workplaces = [] } = useListWorkplaces({ query: { enabled: !!user?.companyId, queryKey: getListWorkplacesQueryKey() } });
+  const { data: leaveRequests = [] } = useListLeaveRequests({ query: { enabled: !!user?.companyId, queryKey: getListLeaveRequestsQueryKey() } });
+  const { data: availabilityList = [] } = useListAvailability({ query: { enabled: !!user?.companyId, queryKey: getListAvailabilityQueryKey() } });
+
   const createShift = useCreateShift();
   const updateShift = useUpdateShift();
   const deleteShift = useDeleteShift();
 
-  const form = useForm<z.infer<typeof shiftSchema>>({
-    resolver: zodResolver(shiftSchema),
-    defaultValues: { status: 'published', role: '' },
-  });
+  const employees = useMemo(
+    () => users.filter(u => u.role !== "platform_admin" && (isManager ? true : u.id === user?.id)),
+    [users, isManager, user]
+  );
 
-  function onSubmit(values: z.infer<typeof shiftSchema>) {
-    // combine date and time into ISO
-    const start = new Date(`${values.startTimeDate}T${values.startTimeTime}`);
-    const end = new Date(`${values.endTimeDate}T${values.endTimeTime}`);
+  const shiftsByEmpAndDate = useMemo(() => {
+    const map = new Map<string, Shift[]>();
+    for (const shift of shifts) {
+      if (!shift.startTime) continue;
+      const dateStr = format(new Date(shift.startTime), "yyyy-MM-dd");
+      const key = `${shift.employeeId ?? "unassigned"}:${dateStr}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(shift);
+    }
+    return map;
+  }, [shifts]);
 
+  const leaveByEmpAndDate = useMemo(() => {
+    const map = new Map<string, LeaveRequest>();
+    for (const lr of leaveRequests) {
+      if (!lr.startDate || !lr.endDate) continue;
+      let d = new Date(lr.startDate);
+      const end = new Date(lr.endDate);
+      while (d <= end) {
+        const dateStr = format(d, "yyyy-MM-dd");
+        const key = `${lr.employeeId}:${dateStr}`;
+        if (!map.has(key)) map.set(key, lr);
+        d = addDays(d, 1);
+      }
+    }
+    return map;
+  }, [leaveRequests]);
+
+  const availByEmpAndDate = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const avail of availabilityList) {
+      const slots = avail.slots as Record<string, boolean> | null;
+      if (!slots) continue;
+      for (const [dateStr, available] of Object.entries(slots)) {
+        map.set(`${avail.employeeId}:${dateStr}`, available);
+      }
+    }
+    return map;
+  }, [availabilityList]);
+
+  function openCreate(employeeId: number | null, dateStr: string) {
+    setFormValues({ startTime: "09:00", endTime: "17:00", workplaceId: "", role: "", notes: "" });
+    setLeaveWarning(null);
+    setModal({ open: true, mode: "create", employeeId, date: dateStr });
+    if (employeeId) {
+      apiCheckLeave(employeeId, dateStr).then(res => {
+        if (res.hasConflict) {
+          toast({ title: "Cannot schedule", description: `Employee has approved ${res.leaveType} leave on this date.`, variant: "destructive" });
+          setModal(m => ({ ...m, open: false }));
+        } else if (res.hasPending) {
+          setLeaveWarning({ hasPending: true, leaveType: res.leaveType });
+        }
+      });
+    }
+  }
+
+  function openEdit(shift: Shift) {
+    const dateStr = format(new Date(shift.startTime!), "yyyy-MM-dd");
+    setFormValues({
+      startTime: format(new Date(shift.startTime!), "HH:mm"),
+      endTime: shift.endTime ? format(new Date(shift.endTime), "HH:mm") : "17:00",
+      workplaceId: shift.workplaceId?.toString() || "",
+      role: shift.role || "",
+      notes: shift.notes || "",
+    });
+    setLeaveWarning(null);
+    setModal({ open: true, mode: "edit", employeeId: shift.employeeId || null, date: dateStr, shift });
+  }
+
+  async function handleSubmit() {
+    if (!formValues.startTime || !formValues.endTime) return;
+    const startISO = `${modal.date}T${formValues.startTime}:00`;
+    const endISO = `${modal.date}T${formValues.endTime}:00`;
     const payload = {
-      employeeId: values.employeeId || null,
-      workplaceId: values.workplaceId || null,
-      startTime: start.toISOString(),
-      endTime: end.toISOString(),
-      role: values.role,
-      status: values.status,
+      startTime: startISO,
+      endTime: endISO,
+      employeeId: modal.employeeId || null,
+      workplaceId: formValues.workplaceId ? parseInt(formValues.workplaceId) : null,
+      role: formValues.role || null,
+      notes: formValues.notes || null,
     };
+    if (modal.mode === "create") {
+      createShift.mutate({ data: payload as any }, {
+        onSuccess: () => {
+          toast({ title: "Shift created" });
+          qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+          setModal(m => ({ ...m, open: false }));
+        },
+        onError: (err: any) => {
+          toast({ title: "Error", description: err?.data?.error || "Failed to create shift", variant: "destructive" });
+        }
+      });
+    } else if (modal.shift) {
+      updateShift.mutate({ id: modal.shift.id, data: payload as any }, {
+        onSuccess: () => {
+          toast({ title: "Shift updated" });
+          qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+          setModal(m => ({ ...m, open: false }));
+        },
+        onError: (err: any) => {
+          toast({ title: "Error", description: err?.data?.error || "Failed to update", variant: "destructive" });
+        }
+      });
+    }
+  }
 
-    createShift.mutate({ data: payload }, {
+  async function handleDelete() {
+    if (!modal.shift) return;
+    setDeleting(true);
+    deleteShift.mutate({ id: modal.shift.id }, {
       onSuccess: () => {
-        setOpen(false);
-        form.reset();
-        queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
-        toast({ title: "Shift created" });
+        toast({ title: "Shift deleted" });
+        qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+        setModal(m => ({ ...m, open: false }));
+        setDeleting(false);
       }
     });
   }
 
-  const handleDelete = (id: number) => {
-    if (confirm("Delete this shift?")) {
-      deleteShift.mutate({ id }, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
-        }
-      });
+  async function publishAll() {
+    const draftShifts = shifts.filter(s => s.status === "draft");
+    if (!draftShifts.length) {
+      toast({ title: "No drafts", description: "All shifts are already published." });
+      return;
     }
-  };
+    setPublishing(true);
+    try {
+      await Promise.all(draftShifts.map(s => updateShift.mutateAsync({ id: s.id, data: { status: "published" } as any })));
+      qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+      toast({ title: `${draftShifts.length} shift${draftShifts.length > 1 ? "s" : ""} published` });
+    } catch {
+      toast({ title: "Publish failed", variant: "destructive" });
+    } finally {
+      setPublishing(false);
+    }
+  }
 
-  const handleStatusChange = (shift: any, status: 'draft' | 'published' | 'cancelled') => {
-    updateShift.mutate({ 
-      id: shift.id, 
-      data: { 
-        status,
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        employeeId: shift.employeeId,
-        workplaceId: shift.workplaceId,
-        role: shift.role 
-      } 
-    }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
-      }
-    });
-  };
+  function getCellBg(empId: number, dateStr: string) {
+    const leave = leaveByEmpAndDate.get(`${empId}:${dateStr}`);
+    if (leave?.status === "approved") return "bg-red-500/10";
+    if (leave?.status === "pending") return "bg-amber-500/10";
+    if (availByEmpAndDate.get(`${empId}:${dateStr}`)) return "bg-emerald-500/8";
+    return "";
+  }
 
-  // Generate week days
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-  const days = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
-
-  const filteredShifts = user?.role === 'employee' ? shifts.filter(s => s.employeeId === user.id) : shifts;
+  const draftCount = shifts.filter(s => s.status === "draft").length;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-4xl font-bold font-sans tracking-tight text-foreground">Schedule</h1>
-          <p className="text-muted-foreground mt-2 font-mono text-sm uppercase tracking-widest">Weekly shift planner</p>
+          <h1 className="text-2xl sm:text-3xl font-bold font-sans tracking-tight">Roster</h1>
+          <p className="text-muted-foreground text-xs font-mono uppercase tracking-widest mt-0.5">
+            Week of {format(weekStart, "MMM d, yyyy")}
+          </p>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center bg-card rounded-md border shadow-sm p-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCurrentDate(addDays(currentDate, -7))}>
+        <div className="flex items-center flex-wrap gap-2">
+          <div className="flex items-center bg-card border rounded-md shadow-sm">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-l-md" onClick={() => setWeekStart(w => subWeeks(w, 1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="px-4 font-semibold text-sm">
-              {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
-            </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCurrentDate(addDays(currentDate, 7))}>
+            <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-mono rounded-none border-x" onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}>
+              Today
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-r-md" onClick={() => setWeekStart(w => addWeeks(w, 1))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-
-          {user?.role !== 'employee' && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button className="font-semibold"><Plus className="w-4 h-4 mr-2" /> New Shift</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Create Shift</DialogTitle>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="employeeId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Employee (Optional)</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value?.toString() || ""}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="0">Unassigned (Open)</SelectItem>
-                                {users.filter(u => u.status === 'active').map(u => (
-                                  <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="workplaceId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Location</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value?.toString() || ""}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                {workplaces.map(w => (
-                                  <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="startTimeDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Start Date</FormLabel>
-                            <FormControl><Input type="date" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="startTimeTime"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Start Time</FormLabel>
-                            <FormControl><Input type="time" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="endTimeDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>End Date</FormLabel>
-                            <FormControl><Input type="date" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="endTimeTime"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>End Time</FormLabel>
-                            <FormControl><Input type="time" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="role"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Role/Duty (Optional)</FormLabel>
-                            <FormControl><Input placeholder="e.g. Cashier" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="status"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Status</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="draft">Draft</SelectItem>
-                                <SelectItem value="published">Published</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    
-                    <div className="flex justify-end pt-4">
-                      <Button type="submit" disabled={createShift.isPending}>
-                        {createShift.isPending ? "Creating..." : "Create Shift"}
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+          {isManager && draftCount > 0 && (
+            <Button size="sm" className="font-semibold gap-1.5" onClick={publishAll} disabled={publishing}>
+              <Send className="h-3.5 w-3.5" />
+              {publishing ? "Publishing..." : `Publish ${draftCount} Draft${draftCount > 1 ? "s" : ""}`}
+            </Button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-        {days.map((day, i) => {
-          const dayShifts = filteredShifts.filter(s => isSameDay(parseISO(s.startTime), day));
-          const isTodayDate = isSameDay(new Date(), day);
-          
-          return (
-            <div key={i} className="flex flex-col h-full min-h-[400px]">
-              <div className={`p-3 text-center border-b-4 ${isTodayDate ? 'border-primary bg-primary/5' : 'border-transparent'}`}>
-                <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{format(day, 'EEE')}</div>
-                <div className={`text-2xl font-bold font-sans mt-1 ${isTodayDate ? 'text-primary' : ''}`}>{format(day, 'd')}</div>
-              </div>
-              <div className="flex-1 bg-card/40 border border-border/50 border-t-0 p-2 space-y-2 rounded-b-lg">
-                {dayShifts.map(shift => {
-                  const employee = users.find(u => u.id === shift.employeeId);
-                  const workplace = workplaces.find(w => w.id === shift.workplaceId);
-                  
-                  return (
-                    <div key={shift.id} className={`p-3 rounded-md border shadow-sm group relative ${shift.status === 'draft' ? 'bg-muted/50 border-dashed border-muted-foreground/30' : 'bg-card border-border hover-elevate'}`}>
-                      <div className="font-mono text-xs font-bold text-foreground">
-                        {format(parseISO(shift.startTime), 'HH:mm')} - {format(parseISO(shift.endTime), 'HH:mm')}
-                      </div>
-                      
-                      {user?.role !== 'employee' && (
-                        <div className="mt-1.5 flex items-center gap-1.5 text-sm font-medium">
-                          <User className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className={!employee ? "text-accent italic" : ""}>
-                            {employee ? employee.name : "Unassigned"}
-                          </span>
-                        </div>
-                      )}
-                      
-                      {workplace && (
-                        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <MapPin className="w-3 h-3" />
-                          <span className="truncate">{workplace.name}</span>
-                        </div>
-                      )}
-                      
-                      {shift.role && (
-                        <div className="mt-2 inline-block bg-accent/10 text-accent-foreground text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded">
-                          {shift.role}
-                        </div>
-                      )}
+      {/* Legend */}
+      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+        {[
+          { color: "bg-emerald-500/20 border border-emerald-500/30", label: "Available" },
+          { color: "bg-amber-500/20 border border-amber-500/30", label: "Pending leave" },
+          { color: "bg-red-500/20 border border-red-500/30", label: "Approved leave" },
+          { color: "bg-primary/20 border border-primary/30", label: "Published" },
+          { color: "bg-muted border border-border", label: "Draft" },
+        ].map(({ color, label }) => (
+          <span key={label} className="flex items-center gap-1.5">
+            <span className={`w-3 h-3 rounded ${color}`} />
+            {label}
+          </span>
+        ))}
+      </div>
 
-                      {user?.role !== 'employee' && (
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-card/80 backdrop-blur rounded shadow-sm border p-0.5">
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDelete(shift.id)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+      {/* Grid */}
+      <div className="border border-border/50 rounded-xl overflow-hidden shadow-md bg-card">
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed border-collapse" style={{ minWidth: 700 }}>
+            <thead>
+              <tr className="bg-muted/50 border-b border-border/50">
+                <th className="sticky left-0 z-10 bg-muted/80 backdrop-blur w-28 min-w-[110px] text-left px-3 py-3 text-xs uppercase tracking-wider font-mono text-muted-foreground border-r border-border/50">
+                  Staff
+                </th>
+                {weekDates.map((d, i) => {
+                  const isToday = format(new Date(), "yyyy-MM-dd") === format(d, "yyyy-MM-dd");
+                  return (
+                    <th key={i} className={`py-3 px-1 text-center text-xs uppercase tracking-wider font-mono border-r last:border-r-0 border-border/30 ${isToday ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}>
+                      <div className="font-bold">{DAYS[i]}</div>
+                      <div className={`text-base font-bold mt-0.5 ${isToday ? "text-primary" : "text-foreground"}`}>{format(d, "d")}</div>
+                      <div className="text-[10px] opacity-60 font-normal">{format(d, "MMM")}</div>
+                    </th>
                   );
                 })}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30">
+              {employees.map(emp => (
+                <tr key={emp.id} className="group hover:bg-muted/10 transition-colors">
+                  <td className="sticky left-0 z-10 bg-card border-r border-border/50 px-3 py-2 w-28 min-w-[110px]">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-[11px] font-bold text-primary flex-shrink-0">
+                        {emp.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs truncate">{emp.name.split(" ")[0]}</div>
+                        <div className="text-[10px] text-muted-foreground capitalize">{emp.role}</div>
+                      </div>
+                    </div>
+                  </td>
+                  {weekDates.map((d, i) => {
+                    const dateStr = format(d, "yyyy-MM-dd");
+                    const cellShifts = shiftsByEmpAndDate.get(`${emp.id}:${dateStr}`) || [];
+                    const leave = leaveByEmpAndDate.get(`${emp.id}:${dateStr}`);
+                    const isApprovedLeave = leave?.status === "approved";
+                    const isPendingLeave = leave?.status === "pending";
+                    return (
+                      <td key={i} className={`border-r last:border-r-0 border-border/30 align-top p-1 ${getCellBg(emp.id, dateStr)}`}>
+                        <div className="flex flex-col gap-0.5 min-h-[64px]">
+                          {isApprovedLeave && (
+                            <div className="flex items-center gap-1 px-1 py-0.5 bg-red-500/15 text-red-600 dark:text-red-400 rounded text-[10px] font-semibold border border-red-400/30">
+                              <Ban className="w-2.5 h-2.5 flex-shrink-0" />
+                              <span className="truncate capitalize">{leave!.type}</span>
+                            </div>
+                          )}
+                          {isPendingLeave && !isApprovedLeave && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1 px-1 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded text-[10px] font-semibold border border-amber-400/30 cursor-help">
+                                  <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
+                                  <span className="truncate capitalize">{leave!.type}?</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>Pending leave — {leave!.type}</TooltipContent>
+                            </Tooltip>
+                          )}
+                          {cellShifts.map(shift => (
+                            <button
+                              key={shift.id}
+                              onClick={() => isManager && openEdit(shift)}
+                              className={`w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+                            >
+                              <div className="truncate">{fmtTime(shift.startTime!)}–{fmtTime(shift.endTime!)}</div>
+                              {shift.status === "draft" && <div className="text-[9px] font-normal opacity-60 uppercase tracking-widest">Draft</div>}
+                            </button>
+                          ))}
+                          {isManager && !isApprovedLeave && (
+                            <button
+                              onClick={() => openCreate(emp.id, dateStr)}
+                              className="flex items-center justify-center h-6 w-full opacity-0 group-hover:opacity-100 rounded border border-dashed border-border/50 text-muted-foreground hover:border-primary hover:text-primary transition-all text-xs mt-auto"
+                              title="Add shift"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+
+              {/* Unassigned row */}
+              {isManager && (
+                <tr className="group bg-muted/20 hover:bg-muted/30 transition-colors">
+                  <td className="sticky left-0 z-10 bg-muted/40 border-r border-border/50 px-3 py-2">
+                    <div className="text-[10px] font-semibold text-muted-foreground font-mono uppercase tracking-wider">Open Shifts</div>
+                  </td>
+                  {weekDates.map((d, i) => {
+                    const dateStr = format(d, "yyyy-MM-dd");
+                    const unassigned = shiftsByEmpAndDate.get(`unassigned:${dateStr}`) || [];
+                    return (
+                      <td key={i} className="border-r last:border-r-0 border-border/30 align-top p-1">
+                        <div className="flex flex-col gap-0.5 min-h-[48px]">
+                          {unassigned.map(shift => (
+                            <button key={shift.id} onClick={() => openEdit(shift)} className={`w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")}`}>
+                              <div className="truncate">{fmtTime(shift.startTime!)}–{fmtTime(shift.endTime!)}</div>
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => openCreate(null, dateStr)}
+                            className="flex items-center justify-center h-6 w-full opacity-0 group-hover:opacity-100 rounded border border-dashed border-border/50 text-muted-foreground hover:border-primary hover:text-primary transition-all text-xs mt-auto"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isManager && (
+        <p className="text-xs text-muted-foreground text-center">
+          Hover a row and click <strong>+</strong> to add a shift · Click a shift to edit · Background colours show staff leave and availability
+        </p>
+      )}
+
+      {/* Shift Dialog */}
+      <Dialog open={modal.open} onOpenChange={(v) => !v && setModal(m => ({ ...m, open: false }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-primary" />
+              {modal.mode === "create" ? "Add Shift" : "Edit Shift"}
+            </DialogTitle>
+            <DialogDescription className="font-mono text-xs">
+              {modal.date && format(parseISO(modal.date), "EEEE, MMMM d, yyyy")}
+              {" · "}
+              {modal.employeeId
+                ? employees.find(e => e.id === modal.employeeId)?.name ?? `Employee #${modal.employeeId}`
+                : "Open / Unassigned"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {leaveWarning?.hasPending && (
+            <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-400/30 rounded-lg p-3 text-sm">
+              <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-700 dark:text-amber-400">Pending leave request</p>
+                <p className="text-amber-600 dark:text-amber-500 text-xs mt-0.5">
+                  This employee has pending {leaveWarning.leaveType} leave on this date. You can still schedule them — it will conflict if the leave is approved.
+                </p>
               </div>
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          <div className="space-y-4">
+            {isManager && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Employee</Label>
+                  <Select value={modal.employeeId?.toString() || "unassigned"} onValueChange={v => setModal(m => ({ ...m, employeeId: v === "unassigned" ? null : parseInt(v) }))} disabled={modal.mode === "edit"}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Open / Unassigned</SelectItem>
+                      {employees.map(e => <SelectItem key={e.id} value={e.id.toString()}>{e.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Workplace</Label>
+                  <Select value={formValues.workplaceId || "none"} onValueChange={v => setFormValues(f => ({ ...f, workplaceId: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="No workplace" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No workplace</SelectItem>
+                      {workplaces.map(wp => <SelectItem key={wp.id} value={wp.id.toString()}>{wp.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Start Time</Label>
+                <Input type="time" value={formValues.startTime} onChange={e => setFormValues(f => ({ ...f, startTime: e.target.value }))} className="h-9" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">End Time</Label>
+                <Input type="time" value={formValues.endTime} onChange={e => setFormValues(f => ({ ...f, endTime: e.target.value }))} className="h-9" />
+              </div>
+            </div>
+
+            {isManager && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Role / Position <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                <Input placeholder="e.g. Cashier, Supervisor" value={formValues.role} onChange={e => setFormValues(f => ({ ...f, role: e.target.value }))} className="h-9" />
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Textarea placeholder="Any notes..." value={formValues.notes} onChange={e => setFormValues(f => ({ ...f, notes: e.target.value }))} rows={2} className="resize-none" />
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+            {modal.mode === "edit" && isManager && (
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting} className="sm:mr-auto">
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                {deleting ? "Deleting..." : "Delete"}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setModal(m => ({ ...m, open: false }))}>Cancel</Button>
+            <Button size="sm" className="font-semibold" onClick={handleSubmit} disabled={createShift.isPending || updateShift.isPending}>
+              {createShift.isPending || updateShift.isPending ? "Saving..." : modal.mode === "create" ? "Add Shift" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

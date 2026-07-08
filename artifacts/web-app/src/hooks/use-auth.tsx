@@ -5,9 +5,9 @@ import type { UserProfile } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 
 interface AuthContextType {
-  user: UserProfile | null;
+  user: (UserProfile & { mustChangePassword?: boolean }) | null;
   isLoading: boolean;
-  login: (token: string) => void;
+  login: (token: string, mustChangePassword?: boolean) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -24,7 +24,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       enabled: !!token,
       queryKey: getGetMeQueryKey(),
       retry: false,
-      // Do not keep stale data when query is disabled (token removed)
       staleTime: 0,
     }
   });
@@ -37,27 +36,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token]);
 
-  const login = (newToken: string) => {
+  const login = (newToken: string, mustChangePassword?: boolean) => {
+    // Set localStorage immediately so API calls can read the token before the effect fires
+    localStorage.setItem("auth_token", newToken);
     setToken(newToken);
+    if (mustChangePassword) {
+      localStorage.setItem("must_change_password", "1");
+    } else {
+      localStorage.removeItem("must_change_password");
+    }
   };
 
   const logout = () => {
-    // 1. Remove the token from state and localStorage
     setToken(null);
-    // 2. Immediately evict the /me cache so guards see no user
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("must_change_password");
     queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
-    // 3. Force navigation to login
     navigate("/login");
   };
 
-  // Auth is loading only when we have a token and are still fetching
   const isAuthLoading = !!token && isLoading;
-  // isAuthenticated requires both a token AND a successfully fetched user
   const isAuthenticated = !!token && !!user;
+
+  const enrichedUser = user ? {
+    ...user,
+    mustChangePassword: (user as any).mustChangePassword ?? localStorage.getItem("must_change_password") === "1",
+  } : null;
 
   return (
     <AuthContext.Provider value={{
-      user: user ?? null,
+      user: enrichedUser,
       isLoading: isAuthLoading,
       login,
       logout,

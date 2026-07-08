@@ -7,10 +7,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Building, User } from "lucide-react";
+import { Building, User, Mail, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
+import { apiSaveSmtp, apiTestSmtp, apiChangePassword } from "@/lib/platform-api";
+import { Switch } from "@/components/ui/switch";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Name required"),
@@ -24,17 +26,34 @@ const companySchema = z.object({
   overtimeThreshold: z.string().min(1, "Threshold required"),
 });
 
+const smtpSchema = z.object({
+  host: z.string().min(1, "Host required"),
+  port: z.coerce.number().int().min(1).max(65535),
+  secure: z.boolean().default(false),
+  user: z.string().min(1, "Username required"),
+  pass: z.string().min(1, "Password required"),
+  from: z.string().min(1, "From address required"),
+});
+
+const changePassSchema = z.object({
+  currentPassword: z.string().min(1, "Current password required"),
+  newPassword: z.string().min(8, "Min 8 characters"),
+  confirmPassword: z.string().min(8),
+}).refine(d => d.newPassword === d.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [changingPass, setChangingPass] = useState(false);
+
   const updateUser = useUpdateUser();
   const updateCompany = useUpdateCompany();
 
-  // If user is admin/manager, fetch company settings
-  const { data: company, isLoading: companyLoading } = useGetCompany(user?.companyId || 0, { 
-    query: { enabled: !!user && !!user.companyId && user.role === 'admin', queryKey: ['/api/companies', user?.companyId || 0] } 
+  const { data: company, isLoading: companyLoading } = useGetCompany(user?.companyId || 0, {
+    query: { enabled: !!user && !!user.companyId && user.role === 'admin', queryKey: ['/api/companies', user?.companyId || 0] }
   });
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
@@ -44,25 +63,30 @@ export default function SettingsPage() {
 
   const companyForm = useForm<z.infer<typeof companySchema>>({
     resolver: zodResolver(companySchema),
-    defaultValues: { name: "", address: "", timezone: "UTC", overtimeThreshold: "40:00:00" },
+    defaultValues: { name: "", address: "", timezone: "UTC", overtimeThreshold: "40" },
+  });
+
+  const smtpForm = useForm<z.infer<typeof smtpSchema>>({
+    resolver: zodResolver(smtpSchema),
+    defaultValues: { host: "", port: 587, secure: false, user: "", pass: "", from: "" },
+  });
+
+  const passForm = useForm<z.infer<typeof changePassSchema>>({
+    resolver: zodResolver(changePassSchema),
+    defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
   });
 
   useEffect(() => {
-    if (user) {
-      profileForm.reset({ name: user.name, phone: user.phone });
-    }
-  }, [user, profileForm]);
+    if (user) profileForm.reset({ name: user.name, phone: user.phone });
+  }, [user]);
 
   useEffect(() => {
     if (company) {
-      companyForm.reset({ 
-        name: company.name, 
-        address: company.address, 
-        timezone: company.timezone, 
-        overtimeThreshold: company.overtimeThreshold 
-      });
+      companyForm.reset({ name: company.name, address: company.address, timezone: company.timezone, overtimeThreshold: company.overtimeThreshold });
+      const smtp = (company as any).smtpConfig;
+      if (smtp) smtpForm.reset({ host: smtp.host || "", port: smtp.port || 587, secure: smtp.secure || false, user: smtp.user || "", pass: smtp.pass || "", from: smtp.from || "" });
     }
-  }, [company, companyForm]);
+  }, [company]);
 
   function onProfileSubmit(values: z.infer<typeof profileSchema>) {
     if (!user) return;
@@ -78,125 +102,198 @@ export default function SettingsPage() {
     if (!company) return;
     updateCompany.mutate({ id: company.id, data: values }, {
       onSuccess: () => {
-        toast({ title: "Company updated" });
+        toast({ title: "Company settings saved" });
         queryClient.invalidateQueries({ queryKey: ['/api/companies', company.id] });
       }
     });
   }
 
+  async function onSmtpTest(values: z.infer<typeof smtpSchema>) {
+    if (!user?.companyId) return;
+    setSmtpTesting(true);
+    try {
+      const res = await apiTestSmtp(user.companyId, values);
+      if (res.success) {
+        toast({ title: "SMTP Connected", description: "Connection verified successfully." });
+      } else {
+        toast({ title: "SMTP Failed", description: res.message, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Test failed", variant: "destructive" });
+    } finally {
+      setSmtpTesting(false);
+    }
+  }
+
+  async function onSmtpSave(values: z.infer<typeof smtpSchema>) {
+    if (!user?.companyId) return;
+    setSmtpSaving(true);
+    try {
+      await apiSaveSmtp(user.companyId, values);
+      toast({ title: "SMTP settings saved" });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies', user.companyId] });
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err?.data?.error, variant: "destructive" });
+    } finally {
+      setSmtpSaving(false);
+    }
+  }
+
+  async function onPasswordChange(values: z.infer<typeof changePassSchema>) {
+    setChangingPass(true);
+    try {
+      await apiChangePassword(values.currentPassword, values.newPassword);
+      toast({ title: "Password changed successfully" });
+      passForm.reset();
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.data?.error || "Could not change password", variant: "destructive" });
+    } finally {
+      setChangingPass(false);
+    }
+  }
+
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl">
       <div>
-        <h1 className="text-4xl font-bold font-sans tracking-tight text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-2 font-mono text-sm uppercase tracking-widest">Manage your preferences</p>
+        <h1 className="text-3xl sm:text-4xl font-bold font-sans tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-1 font-mono text-xs uppercase tracking-widest">Manage your preferences</p>
       </div>
 
+      {/* Profile */}
       <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur">
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="w-5 h-5 text-primary" />
-            <CardTitle>Personal Profile</CardTitle>
-          </div>
-          <CardDescription>Update your personal information.</CardDescription>
+          <div className="flex items-center gap-2"><User className="w-4 h-4 text-primary" /><CardTitle className="text-base">Personal Profile</CardTitle></div>
+          <CardDescription>Update your name and phone number.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...profileForm}>
             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={profileForm.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Full Name</FormLabel>
-                      <FormControl><Input {...field} value={field.value || ""} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
-                      <FormControl><Input {...field} value={field.value || ""} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField control={profileForm.control} name="name" render={({ field }) => (
+                  <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={profileForm.control} name="phone" render={({ field }) => (
+                  <FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                )} />
               </div>
               <div className="flex justify-end">
-                <Button type="submit" disabled={updateUser.isPending}>
-                  {updateUser.isPending ? "Saving..." : "Save Profile"}
-                </Button>
+                <Button type="submit" size="sm" disabled={updateUser.isPending}>{updateUser.isPending ? "Saving..." : "Save Profile"}</Button>
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
 
+      {/* Change Password */}
+      <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur">
+        <CardHeader>
+          <div className="flex items-center gap-2"><KeyRound className="w-4 h-4 text-primary" /><CardTitle className="text-base">Change Password</CardTitle></div>
+          <CardDescription>Update your account password.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...passForm}>
+            <form onSubmit={passForm.handleSubmit(onPasswordChange)} className="space-y-4">
+              <FormField control={passForm.control} name="currentPassword" render={({ field }) => (
+                <FormItem><FormLabel>Current Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField control={passForm.control} name="newPassword" render={({ field }) => (
+                  <FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={passForm.control} name="confirmPassword" render={({ field }) => (
+                  <FormItem><FormLabel>Confirm Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" size="sm" disabled={changingPass}>{changingPass ? "Changing..." : "Change Password"}</Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      {/* Company Settings - admin only */}
       {user?.role === 'admin' && company && !companyLoading && (
         <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur border-t-4 border-t-primary">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Building className="w-5 h-5 text-primary" />
-              <CardTitle>Company Settings</CardTitle>
-            </div>
-            <CardDescription>Manage organization-wide configurations.</CardDescription>
+            <div className="flex items-center gap-2"><Building className="w-4 h-4 text-primary" /><CardTitle className="text-base">Company Settings</CardTitle></div>
+            <CardDescription>Manage organisation-wide configurations.</CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...companyForm}>
               <form onSubmit={companyForm.handleSubmit(onCompanySubmit)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={companyForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Company Name</FormLabel>
-                        <FormControl><Input {...field} value={field.value || ""} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={companyForm.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Address</FormLabel>
-                        <FormControl><Input {...field} value={field.value || ""} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={companyForm.control}
-                    name="timezone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Timezone</FormLabel>
-                        <FormControl><Input {...field} value={field.value || ""} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={companyForm.control}
-                    name="overtimeThreshold"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Overtime Threshold</FormLabel>
-                        <FormControl><Input {...field} value={field.value || ""} placeholder="40:00:00" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={companyForm.control} name="name" render={({ field }) => (
+                    <FormItem><FormLabel>Company Name</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={companyForm.control} name="address" render={({ field }) => (
+                    <FormItem><FormLabel>Address</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={companyForm.control} name="timezone" render={({ field }) => (
+                    <FormItem><FormLabel>Timezone</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={companyForm.control} name="overtimeThreshold" render={({ field }) => (
+                    <FormItem><FormLabel>Overtime Threshold (hrs/week)</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                  )} />
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={updateCompany.isPending}>
-                    {updateCompany.isPending ? "Saving..." : "Save Company"}
+                  <Button type="submit" size="sm" disabled={updateCompany.isPending}>{updateCompany.isPending ? "Saving..." : "Save Company"}</Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* SMTP Settings - admin only */}
+      {user?.role === 'admin' && (
+        <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur">
+          <CardHeader>
+            <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-primary" /><CardTitle className="text-base">Email / SMTP Settings</CardTitle></div>
+            <CardDescription>Configure email delivery for invitations and notifications. Supports custom SMTP or Gmail App Passwords.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 mb-4 space-y-1">
+              <p className="font-semibold text-foreground">Gmail setup:</p>
+              <p>Host: <code className="font-mono">smtp.gmail.com</code> · Port: <code className="font-mono">587</code> · User: your Gmail · Pass: Gmail App Password</p>
+              <p className="font-semibold text-foreground mt-2">Custom SMTP:</p>
+              <p>Use your mail provider's SMTP credentials. Port 465 uses SSL, port 587 uses STARTTLS.</p>
+            </div>
+            <Form {...smtpForm}>
+              <form className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <FormField control={smtpForm.control} name="host" render={({ field }) => (
+                      <FormItem><FormLabel>SMTP Host</FormLabel><FormControl><Input placeholder="smtp.gmail.com" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                  <FormField control={smtpForm.control} name="port" render={({ field }) => (
+                    <FormItem><FormLabel>Port</FormLabel><FormControl><Input type="number" placeholder="587" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+                <FormField control={smtpForm.control} name="secure" render={({ field }) => (
+                  <FormItem className="flex items-center gap-3">
+                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <FormLabel className="!mt-0">Use SSL/TLS (port 465)</FormLabel>
+                  </FormItem>
+                )} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={smtpForm.control} name="user" render={({ field }) => (
+                    <FormItem><FormLabel>Username</FormLabel><FormControl><Input placeholder="your@email.com" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={smtpForm.control} name="pass" render={({ field }) => (
+                    <FormItem><FormLabel>Password / App Password</FormLabel><FormControl><Input type="password" placeholder="••••••••••••" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </div>
+                <FormField control={smtpForm.control} name="from" render={({ field }) => (
+                  <FormItem><FormLabel>From Address</FormLabel><FormControl><Input placeholder="SYNTRA <noreply@company.com>" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button type="button" variant="outline" size="sm" disabled={smtpTesting} onClick={smtpForm.handleSubmit(onSmtpTest)}>
+                    {smtpTesting ? "Testing..." : "Test Connection"}
+                  </Button>
+                  <Button type="button" size="sm" disabled={smtpSaving} onClick={smtpForm.handleSubmit(onSmtpSave)}>
+                    {smtpSaving ? "Saving..." : "Save SMTP Settings"}
                   </Button>
                 </div>
               </form>

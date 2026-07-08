@@ -7,10 +7,9 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
 
-// Pages
-import IndexPage from "@/pages/index";
+import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
-import RegisterPage from "@/pages/register";
+import ChangePasswordPage from "@/pages/change-password";
 import DashboardPage from "@/pages/dashboard";
 import PlatformPage from "@/pages/platform";
 import SchedulePage from "@/pages/schedule";
@@ -20,15 +19,14 @@ import TimeLogsPage from "@/pages/time-logs";
 import WorkplacesPage from "@/pages/workplaces";
 import InvitationsPage from "@/pages/invitations";
 import SettingsPage from "@/pages/settings";
+import AvailabilityPage from "@/pages/availability";
 
 const queryClient = new QueryClient();
 
-// Configure the generated hooks to use our auth token
 setAuthTokenGetter(() => localStorage.getItem("auth_token"));
 
-// Route-level guard: requires authentication. Redirects to /login if not authed.
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [location] = useLocation();
 
   if (isLoading) {
@@ -43,10 +41,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return <Redirect to={`/login?from=${encodeURIComponent(location)}`} />;
   }
 
+  // Force password change on first login
+  if (user?.mustChangePassword && location !== "/change-password") {
+    return <Redirect to="/change-password" />;
+  }
+
   return <>{children}</>;
 }
 
-// Route-level guard: requires specific role(s). Redirects to /dashboard if wrong role.
 function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
 
@@ -65,7 +67,6 @@ function RequireRole({ roles, children }: { roles: string[]; children: React.Rea
   return <>{children}</>;
 }
 
-// Guest-only: redirect authenticated users away from login/register
 function GuestOnly({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -78,6 +79,7 @@ function GuestOnly({ children }: { children: React.ReactNode }) {
   }
 
   if (isAuthenticated && user) {
+    if (user.mustChangePassword) return <Redirect to="/change-password" />;
     const dest = user.role === 'platform_admin' ? '/platform' : '/dashboard';
     return <Redirect to={dest} />;
   }
@@ -85,20 +87,41 @@ function GuestOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RootRoute() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+  if (isAuthenticated && user) {
+    if (user.mustChangePassword) return <Redirect to="/change-password" />;
+    return <Redirect to={user.role === 'platform_admin' ? '/platform' : '/dashboard'} />;
+  }
+  return <LandingPage />;
+}
+
 function Router() {
   return (
     <Layout>
       <Switch>
-        {/* Public routes */}
-        <Route path="/" component={IndexPage} />
+        <Route path="/" component={RootRoute} />
+
         <Route path="/login">
           <GuestOnly><LoginPage /></GuestOnly>
         </Route>
+
+        {/* Disabled: no self-registration */}
         <Route path="/register">
-          <GuestOnly><RegisterPage /></GuestOnly>
+          <Redirect to="/login" />
         </Route>
 
-        {/* platform_admin only */}
+        <Route path="/change-password">
+          <RequireAuth>
+            <ChangePasswordPage />
+          </RequireAuth>
+        </Route>
+
         <Route path="/platform">
           <RequireAuth>
             <RequireRole roles={['platform_admin']}>
@@ -107,7 +130,6 @@ function Router() {
           </RequireAuth>
         </Route>
 
-        {/* All authenticated users — role-aware rendering happens inside the page */}
         <Route path="/dashboard">
           <RequireAuth>
             <RequireRole roles={['admin', 'manager', 'employee']}>
@@ -124,7 +146,6 @@ function Router() {
           </RequireAuth>
         </Route>
 
-        {/* admin + manager only */}
         <Route path="/team">
           <RequireAuth>
             <RequireRole roles={['admin', 'manager']}>
@@ -149,7 +170,6 @@ function Router() {
           </RequireAuth>
         </Route>
 
-        {/* All authenticated company users */}
         <Route path="/leave">
           <RequireAuth>
             <RequireRole roles={['admin', 'manager', 'employee']}>
@@ -162,6 +182,14 @@ function Router() {
           <RequireAuth>
             <RequireRole roles={['admin', 'manager', 'employee']}>
               <TimeLogsPage />
+            </RequireRole>
+          </RequireAuth>
+        </Route>
+
+        <Route path="/availability">
+          <RequireAuth>
+            <RequireRole roles={['admin', 'manager', 'employee']}>
+              <AvailabilityPage />
             </RequireRole>
           </RequireAuth>
         </Route>

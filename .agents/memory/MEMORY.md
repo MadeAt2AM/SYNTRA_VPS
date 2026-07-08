@@ -1,2 +1,4 @@
-- [ShiftWise stack & seeding](shiftwise-setup.md) — pnpm monorepo, Express 5 + Drizzle + JWT; schema already pushed; seed data inserted; bcrypt hash generation must use ShellExec not CodeExecution sandbox
-- [ShiftWise 4 roles](shiftwise-roles.md) — platform_admin (no company_id, /api/platform/* only), admin (owner), manager, employee; role guards added in App.tsx via RequireAuth+RequireRole components
+- [SYNTRA stack & seeding](shiftwise-setup.md) — pnpm monorepo, Express 5 + Drizzle + JWT; schema already pushed; seed data inserted; bcrypt hash generation must use ShellExec not CodeExecution sandbox
+- [SYNTRA 4 roles](shiftwise-roles.md) — platform_admin (no company_id, /api/platform/* only), admin (owner), manager, employee; role guards added in App.tsx via RequireAuth+RequireRole components
+- [SYNTRA api-server dependencies](syntra-api-deps.md) — date-fns must be installed in api-server package separately; nodemailer installed for SMTP; api-server uses esbuild bundle so all imports must be resolvable at build time
+- [SYNTRA mustChangePassword flow](syntra-must-change-password.md) — boolean DB column must_change_password; login returns it in user object; localStorage key "must_change_password" used as fallback; App.tsx RequireAuth guard redirects to /change-password; cleared after POST /api/auth/change-password
