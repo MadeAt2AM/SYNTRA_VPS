@@ -20,10 +20,20 @@ GH_ORG="MadeAt2AM"
 DOMAIN="terrybot.top"
 Caddy_FILE="/srv/caddy/sites/${PROJ_NAME}.caddy"
 TOKEN_FILE="/srv/scripts/.gh-token"
+ENV_FILE="/srv/secrets/${PROJ_NAME}.env"
 
 # Webhook daemon strips HOME — set sensible defaults for git + any HOME-needing tools.
 export HOME="${HOME:-/root}"
 export USER="${USER:-root}"
+
+# Load Cloudflare DNS env if present (for the ensure_dns() call). Absent in old
+# webhook invocations that don't have these set.
+if [ -f /srv/scripts/.cf-env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . /srv/scripts/.cf-env
+  set +a
+fi
 
 red()    { printf '\033[0;31m%s\033[0m\n' "$*"; }
 green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
@@ -109,6 +119,19 @@ do_redeploy() {
   if [ ! -f docker-compose.yml ]; then
     red "  ✗ no docker-compose.yml in repo"
     return 1
+  fi
+
+  # Materialize the env file for the project. First-deploy case: $proj_dir is
+  # brand new and has no .env yet; subsequent redeploys reuse the existing one
+  # so manual secrets tweaks (rotate SESSION_SECRET etc.) survive pushes.
+  if [ ! -f "$proj_dir/.env" ]; then
+    if [ ! -f "$ENV_FILE" ]; then
+      red "  ✗ no $ENV_FILE — drop the secret env there before first deploy"
+      return 1
+    fi
+    yellow "  → seeding .env from $ENV_FILE (first deploy)"
+    cp "$ENV_FILE" "$proj_dir/.env"
+    chmod 600 "$proj_dir/.env"
   fi
 
   yellow "  → docker compose up -d --build"
