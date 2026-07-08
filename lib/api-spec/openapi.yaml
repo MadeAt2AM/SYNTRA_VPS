@@ -2,14 +2,33 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 0.2.0
+  description: Workforce scheduling API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: companies
+    description: Company management
+  - name: workplaces
+    description: Workplace management
+  - name: shifts
+    description: Shift scheduling
+  - name: availability
+    description: Employee availability
+  - name: leave-requests
+    description: Leave management
+  - name: time-logs
+    description: Time tracking
+  - name: invitations
+    description: Invitation management
+
 paths:
   /healthz:
     get:
@@ -24,13 +43,1233 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Users ─────────────────────────────────────────────────────────────────
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users in the company
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Companies ─────────────────────────────────────────────────────────────
+
+  /companies/{id}:
+    get:
+      operationId: getCompany
+      tags: [companies]
+      summary: Get company details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateCompany
+      tags: [companies]
+      summary: Update company (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCompanyRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+
+  # ── Workplaces ────────────────────────────────────────────────────────────
+
+  /workplaces:
+    get:
+      operationId: listWorkplaces
+      tags: [workplaces]
+      summary: List workplaces
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workplace"
+    post:
+      operationId: createWorkplace
+      tags: [workplaces]
+      summary: Create a workplace (admin/manager)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkplaceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workplace"
+
+  /workplaces/{id}:
+    get:
+      operationId: getWorkplace
+      tags: [workplaces]
+      summary: Get a workplace
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workplace"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateWorkplace
+      tags: [workplaces]
+      summary: Update a workplace
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkplaceRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workplace"
+    delete:
+      operationId: deleteWorkplace
+      tags: [workplaces]
+      summary: Delete a workplace
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Shifts ────────────────────────────────────────────────────────────────
+
+  /shifts:
+    get:
+      operationId: listShifts
+      tags: [shifts]
+      summary: List shifts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shift"
+    post:
+      operationId: createShift
+      tags: [shifts]
+      summary: Create a shift (admin/manager)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+
+  /shifts/{id}:
+    get:
+      operationId: getShift
+      tags: [shifts]
+      summary: Get a shift
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateShift
+      tags: [shifts]
+      summary: Update a shift
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+    delete:
+      operationId: deleteShift
+      tags: [shifts]
+      summary: Delete a shift
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Availability ──────────────────────────────────────────────────────────
+
+  /availability:
+    get:
+      operationId: listAvailability
+      tags: [availability]
+      summary: List availability records
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Availability"
+    post:
+      operationId: createAvailability
+      tags: [availability]
+      summary: Submit availability
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+
+  /availability/{id}:
+    get:
+      operationId: getAvailability
+      tags: [availability]
+      summary: Get availability record
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateAvailability
+      tags: [availability]
+      summary: Update availability record
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+
+  # ── Leave Requests ────────────────────────────────────────────────────────
+
+  /leave-requests:
+    get:
+      operationId: listLeaveRequests
+      tags: [leave-requests]
+      summary: List leave requests
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveRequest"
+    post:
+      operationId: createLeaveRequest
+      tags: [leave-requests]
+      summary: Submit a leave request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveRequestCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+
+  /leave-requests/{id}:
+    get:
+      operationId: getLeaveRequest
+      tags: [leave-requests]
+      summary: Get a leave request
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateLeaveRequest
+      tags: [leave-requests]
+      summary: Update or review a leave request
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveRequestUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+
+  # ── Time Logs ─────────────────────────────────────────────────────────────
+
+  /time-logs:
+    get:
+      operationId: listTimeLogs
+      tags: [time-logs]
+      summary: List time logs
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeLog"
+    post:
+      operationId: clockIn
+      tags: [time-logs]
+      summary: Clock in
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClockInRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeLog"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /time-logs/{id}:
+    get:
+      operationId: getTimeLog
+      tags: [time-logs]
+      summary: Get a time log
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeLog"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: clockOut
+      tags: [time-logs]
+      summary: Clock out or update a time log
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClockOutRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeLog"
+
+  # ── Invitations ───────────────────────────────────────────────────────────
+
+  /invitations:
+    get:
+      operationId: listInvitations
+      tags: [invitations]
+      summary: List invitations (admin/manager)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
+    post:
+      operationId: createInvitation
+      tags: [invitations]
+      summary: Create an invitation (admin/manager)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+
+  /invitations/{id}:
+    get:
+      operationId: getInvitation
+      tags: [invitations]
+      summary: Get an invitation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteInvitation
+      tags: [invitations]
+      summary: Cancel an invitation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    # ── Auth ────────────────────────────────────────────────────────────────
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+        companyName:
+          type: string
+          description: Provide to create a new company (you become admin)
+        invitationToken:
+          type: string
+          description: Provide to join an existing company via invitation
+      required: [email, password, name]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/AuthUser"
+      required: [token, user]
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        companyId:
+          type: integer
+          nullable: true
+      required: [id, email, name, role]
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        hourlyRate:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        companyId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, name, role, status]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        hourlyRate:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [admin, manager, employee]
+        status:
+          type: string
+          enum: [active, inactive]
+        avatarUrl:
+          type: string
+          nullable: true
+
+    # ── Company ─────────────────────────────────────────────────────────────
+
+    Company:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+        plan:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+        weekStartDay:
+          type: integer
+        overtimeThreshold:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, status, plan, timezone, weekStartDay, overtimeThreshold]
+
+    UpdateCompanyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+        weekStartDay:
+          type: integer
+          minimum: 0
+          maximum: 6
+        overtimeThreshold:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+
+    # ── Workplace ────────────────────────────────────────────────────────────
+
+    Workplace:
+      type: object
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+        longitude:
+          type: string
+          nullable: true
+        radiusMeters:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, companyId, name, radiusMeters]
+
+    WorkplaceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+        longitude:
+          type: string
+          nullable: true
+        radiusMeters:
+          type: integer
+      required: [name]
+
+    # ── Shift ────────────────────────────────────────────────────────────────
+
+    Shift:
+      type: object
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        employeeId:
+          type: integer
+          nullable: true
+        workplaceId:
+          type: integer
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, published, cancelled]
+        offerStatus:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdBy:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, companyId, startTime, endTime, status]
+
+    ShiftRequest:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+          nullable: true
+        workplaceId:
+          type: integer
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, published, cancelled]
+        offerStatus:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [startTime, endTime]
+
+    # ── Availability ─────────────────────────────────────────────────────────
+
+    Availability:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        companyId:
+          type: integer
+        weekStart:
+          type: string
+          description: ISO date string e.g. 2026-07-06
+        slots:
+          type: object
+          description: "Flexible JSON e.g. { monday: ['09:00-17:00'] }"
+          additionalProperties: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, employeeId, companyId, weekStart, slots]
+
+    AvailabilityRequest:
+      type: object
+      properties:
+        weekStart:
+          type: string
+        slots:
+          type: object
+          additionalProperties: true
+        notes:
+          type: string
+          nullable: true
+        employeeId:
+          type: integer
+          description: Admin/manager only — submit on behalf of an employee
+      required: [weekStart, slots]
+
+    # ── Leave Request ─────────────────────────────────────────────────────────
+
+    LeaveRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        companyId:
+          type: integer
+        startDate:
+          type: string
+        endDate:
+          type: string
+        type:
+          type: string
+          enum: [annual, sick, unpaid, other]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        reason:
+          type: string
+          nullable: true
+        reviewedBy:
+          type: integer
+          nullable: true
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, employeeId, companyId, startDate, endDate, type, status]
+
+    LeaveRequestCreate:
+      type: object
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        type:
+          type: string
+          enum: [annual, sick, unpaid, other]
+        reason:
+          type: string
+          nullable: true
+      required: [startDate, endDate]
+
+    LeaveRequestUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        type:
+          type: string
+          enum: [annual, sick, unpaid, other]
+        reason:
+          type: string
+          nullable: true
+
+    # ── Time Log ──────────────────────────────────────────────────────────────
+
+    TimeLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        shiftId:
+          type: integer
+          nullable: true
+        employeeId:
+          type: integer
+        companyId:
+          type: integer
+        actualIn:
+          type: string
+          format: date-time
+        actualOut:
+          type: string
+          format: date-time
+          nullable: true
+        payrollIn:
+          type: string
+          format: date-time
+          nullable: true
+        payrollOut:
+          type: string
+          format: date-time
+          nullable: true
+        locationValid:
+          type: boolean
+        validatedHours:
+          type: string
+          nullable: true
+        paid:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, employeeId, companyId, actualIn, locationValid, paid]
+
+    ClockInRequest:
+      type: object
+      properties:
+        shiftId:
+          type: integer
+          nullable: true
+        locationValid:
+          type: boolean
+
+    ClockOutRequest:
+      type: object
+      properties:
+        actualOut:
+          type: string
+          format: date-time
+          nullable: true
+        locationValid:
+          type: boolean
+        payrollIn:
+          type: string
+          format: date-time
+          nullable: true
+        payrollOut:
+          type: string
+          format: date-time
+          nullable: true
+        validatedHours:
+          type: string
+          nullable: true
+        paid:
+          type: boolean
+
+    # ── Invitation ────────────────────────────────────────────────────────────
+
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+          nullable: true
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, employee]
+        status:
+          type: string
+          enum: [pending, accepted, expired]
+        invitedBy:
+          type: integer
+          nullable: true
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, role, status, token]
+
+    InvitationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, manager, employee]
+        expiresAt:
+          type: string
+          format: date-time
+      required: [email]
