@@ -53,9 +53,10 @@ export default function LeavePage() {
     });
   };
 
-  const filteredRequests = user?.role === 'employee' 
+  const filteredRequests = (user?.role === 'employee'
     ? requests.filter(r => r.employeeId === user.id)
-    : requests;
+    : requests
+  ).slice().sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
