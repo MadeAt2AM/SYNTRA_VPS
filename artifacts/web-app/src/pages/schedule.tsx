@@ -555,17 +555,17 @@ export default function SchedulePage() {
                       <td key={i} className={`border-r last:border-r-0 border-border/30 align-top p-1 ${getCellBg(emp.id, dateStr)}`}>
                           <div className="flex flex-col gap-0.5 min-h-[52px]">
                           {isApprovedLeave && (
-                            <div className="flex items-center gap-1 px-1 py-0.5 bg-red-500/15 text-red-600 dark:text-red-400 rounded text-[10px] font-semibold border border-red-400/30">
-                              <Ban className="w-2.5 h-2.5 flex-shrink-0" />
-                              <span className="truncate capitalize">{leave!.type}</span>
+                            <div className="flex items-center gap-0.5 px-1 py-0.5 bg-red-500/15 text-red-600 dark:text-red-400 rounded text-[8px] sm:text-[10px] font-semibold border border-red-400/30">
+                              <Ban className="w-2 h-2 sm:w-2.5 sm:h-2.5 flex-shrink-0" />
+                              <span className="capitalize">{leave!.type}</span>
                             </div>
                           )}
                           {isPendingLeave && !isApprovedLeave && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 px-1 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded text-[10px] font-semibold border border-amber-400/30 cursor-help">
-                                  <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
-                                  <span className="truncate capitalize">{leave!.type}?</span>
+                                <div className="flex items-center gap-0.5 px-1 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded text-[8px] sm:text-[10px] font-semibold border border-amber-400/30 cursor-help">
+                                  <AlertTriangle className="w-2 h-2 sm:w-2.5 sm:h-2.5 flex-shrink-0" />
+                                  <span className="capitalize">{leave!.type}?</span>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>Pending leave — {leave!.type}</TooltipContent>
@@ -578,7 +578,7 @@ export default function SchedulePage() {
                                 ? (selectMode ? toggleShiftSelected(shift.id) : openEdit(shift))
                                 : (shift.status === "published" ? setViewShift(shift) : undefined)
                               }
-                              className={`relative w-full text-left text-[9px] sm:text-[11px] font-semibold px-1 sm:px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager || shift.status === "published" ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                              className={`relative w-full text-center text-[9px] sm:text-[11px] font-semibold px-1 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager || shift.status === "published" ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
                             >
                               {selectMode && isManager && (
                                 <span className="absolute top-0.5 right-0.5">
@@ -587,7 +587,10 @@ export default function SchedulePage() {
                                     : <Square className="w-3 h-3 text-muted-foreground/50" />}
                                 </span>
                               )}
-                              <div className="leading-snug">{fmtTime(shift.startTime!)}<br/>–{fmtTime(shift.endTime!)}</div>
+                              <div className="leading-snug">
+                                {fmtTime(shift.startTime!)}<br className="sm:hidden"/>
+                                <span className="hidden sm:inline">–</span>{fmtTime(shift.endTime!)}
+                              </div>
                               {shift.status === "draft" && <div className="text-[8px] sm:text-[9px] font-normal opacity-60 uppercase tracking-widest">Draft</div>}
                             </button>
                           ))}
@@ -623,7 +626,7 @@ export default function SchedulePage() {
                             <button
                               key={shift.id}
                               onClick={() => selectMode ? toggleShiftSelected(shift.id) : openEdit(shift)}
-                              className={`relative w-full text-left text-[9px] sm:text-[11px] font-semibold px-1 sm:px-1.5 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                              className={`relative w-full text-center text-[9px] sm:text-[11px] font-semibold px-1 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
                             >
                               {selectMode && (
                                 <span className="absolute top-0.5 right-0.5">
@@ -632,7 +635,10 @@ export default function SchedulePage() {
                                     : <Square className="w-3 h-3 text-muted-foreground/50" />}
                                 </span>
                               )}
-                              <div className="leading-snug">{fmtTime(shift.startTime!)}<br/>–{fmtTime(shift.endTime!)}</div>
+                              <div className="leading-snug">
+                                {fmtTime(shift.startTime!)}<br className="sm:hidden"/>
+                                <span className="hidden sm:inline">–</span>{fmtTime(shift.endTime!)}
+                              </div>
                             </button>
                           ))}
                           <button
