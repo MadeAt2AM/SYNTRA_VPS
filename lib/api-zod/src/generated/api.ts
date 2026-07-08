@@ -829,3 +829,23 @@ export const DeleteInvitationParams = zod.object({
 export const DeleteInvitationResponse = zod.void()
 
 
+/**
+ * @summary Resend an invitation with a freshly generated token (admin/manager)
+ */
+export const ResendInvitationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ResendInvitationResponse = zod.object({
+  "id": zod.number(),
+  "companyId": zod.number().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'manager', 'employee']),
+  "status": zod.enum(['pending', 'accepted', 'expired']),
+  "invitedBy": zod.number().nullish(),
+  "token": zod.string(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})
+
+

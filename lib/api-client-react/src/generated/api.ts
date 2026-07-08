@@ -2941,3 +2941,73 @@ export const useDeleteInvitation = <TError = ErrorType<unknown>,
       return useMutation(getDeleteInvitationMutationOptions(options));
     }
 
+export const getResendInvitationUrl = (id: number,) => {
+
+
+
+
+  return `/api/invitations/${id}/resend`
+}
+
+/**
+ * @summary Resend an invitation with a freshly generated token (admin/manager)
+ */
+export const resendInvitation = async (id: number, options?: RequestInit): Promise<Invitation> => {
+
+  return customFetch<Invitation>(getResendInvitationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getResendInvitationMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendInvitation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resendInvitation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['resendInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendInvitation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  resendInvitation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResendInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof resendInvitation>>>
+
+    export type ResendInvitationMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Resend an invitation with a freshly generated token (admin/manager)
+ */
+export const useResendInvitation = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendInvitation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resendInvitation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getResendInvitationMutationOptions(options));
+    }
+

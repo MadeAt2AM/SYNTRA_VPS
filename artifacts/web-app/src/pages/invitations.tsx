@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useListInvitations, useCreateInvitation, useDeleteInvitation , getListInvitationsQueryKey} from "@workspace/api-client-react";
+import { useListInvitations, useCreateInvitation, useDeleteInvitation, useResendInvitation, getListInvitationsQueryKey} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mail, Plus, Trash2, Copy } from "lucide-react";
+import { Mail, Plus, Trash2, Copy, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -28,7 +28,9 @@ export default function InvitationsPage() {
   const { data: invitations = [], isLoading } = useListInvitations({ query: { enabled: !!user , queryKey: getListInvitationsQueryKey() } });
   const createInvitation = useCreateInvitation();
   const deleteInvitation = useDeleteInvitation();
+  const resendInvitation = useResendInvitation();
   const [open, setOpen] = useState(false);
+  const [resendingId, setResendingId] = useState<number | null>(null);
 
   const form = useForm<z.infer<typeof invitationSchema>>({
     resolver: zodResolver(invitationSchema),
@@ -62,6 +64,21 @@ export default function InvitationsPage() {
   const copyToken = (token: string) => {
     navigator.clipboard.writeText(token);
     toast({ title: "Token copied to clipboard" });
+  };
+
+  const handleResend = (id: number) => {
+    setResendingId(id);
+    resendInvitation.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListInvitationsQueryKey() });
+        toast({ title: "Invitation resent", description: "A new token was generated and the old link is no longer valid." });
+        setResendingId(null);
+      },
+      onError: (err: any) => {
+        toast({ title: "Error", description: err?.data?.error || "Failed to resend invitation", variant: "destructive" });
+        setResendingId(null);
+      }
+    });
   };
 
   return (
@@ -171,9 +188,21 @@ export default function InvitationsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(inv.id)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Resend with a new link"
+                            className="hover:bg-primary/10 hover:text-primary"
+                            disabled={resendingId === inv.id}
+                            onClick={() => handleResend(inv.id)}
+                          >
+                            <RotateCcw className={`w-4 h-4 ${resendingId === inv.id ? "animate-spin" : ""}`} />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(inv.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

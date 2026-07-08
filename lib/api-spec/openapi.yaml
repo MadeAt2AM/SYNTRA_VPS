@@ -756,6 +756,25 @@ paths:
         "204":
           description: Deleted
 
+  /invitations/{id}/resend:
+    post:
+      operationId: resendInvitation
+      tags: [invitations]
+      summary: Resend an invitation with a freshly generated token (admin/manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:

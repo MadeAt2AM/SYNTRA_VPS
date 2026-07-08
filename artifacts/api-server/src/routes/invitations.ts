@@ -153,6 +153,114 @@ router.get("/:id", requireRole("admin", "manager"), async (req, res) => {
   res.json(inv);
 });
 
+// POST /api/invitations/:id/resend — generate a fresh token + expiry and resend the email
+router.post("/:id/resend", requireRole("admin", "manager"), async (req, res) => {
+  const id = parseId(req.params["id"], res);
+  if (id === null) return;
+  const { companyId } = req.auth!;
+  if (!companyId) {
+    res.status(400).json({ error: "No company associated with this account" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(invitations)
+    .where(and(eq(invitations.id, id), eq(invitations.companyId, companyId)))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Invitation not found" });
+    return;
+  }
+
+  // Mirror the same privilege boundary enforced on creation: a caller may
+  // only resend (and thus keep alive) invitations for roles they're allowed
+  // to grant. Without this, e.g. a manager could regenerate a live token for
+  // a pending admin invitation they didn't create.
+  const { role: callerRole } = req.auth!;
+  if (!maxGrantableRole(callerRole).includes(existing.role as any)) {
+    res.status(403).json({ error: "You are not permitted to resend an invitation for this role" });
+    return;
+  }
+
+  // Only invitations that are still actionable should be revivable — do not
+  // let a resend silently reopen an invite that was already accepted or
+  // explicitly revoked/cancelled.
+  if (existing.status !== "pending" && existing.status !== "expired") {
+    res.status(400).json({ error: `Cannot resend an invitation with status "${existing.status}"` });
+    return;
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const [inv] = await db
+    .update(invitations)
+    .set({ token, expiresAt, status: "pending" })
+    .where(eq(invitations.id, id))
+    .returning();
+
+  // Try to resend invitation email using company's SMTP config
+  try {
+    const [company] = await db
+      .select({ name: companies.name, smtpConfig: companies.smtpConfig })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
+
+    if (company?.smtpConfig) {
+      const smtp = company.smtpConfig as SmtpConfig;
+      const appUrl = process.env["REPLIT_DEV_DOMAIN"]
+        ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
+        : `${req.protocol}://${req.get("host")}`;
+      const inviteUrl = `${appUrl}/accept-invite?token=${token}&email=${encodeURIComponent(inv.email)}`;
+      const roleLabel = inv.role.charAt(0).toUpperCase() + inv.role.slice(1);
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 40px; border: 1px solid #e5e5e5;">
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="display: inline-block; background: #e11d48; color: #fff; font-weight: 700; font-size: 18px; letter-spacing: 2px; padding: 10px 18px; border-radius: 8px;">SY</div>
+      <h2 style="color: #111; margin: 16px 0 4px; font-size: 22px; font-weight: 700;">SYNTRA</h2>
+      <p style="color: #666; font-size: 12px; margin: 0; letter-spacing: 2px; text-transform: uppercase;">Workforce Management</p>
+    </div>
+
+    <h3 style="color: #111; font-size: 18px; font-weight: 600; margin: 0 0 12px;">You've been invited to join ${company.name}</h3>
+    <p style="color: #444; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
+      This is a fresh invitation link to join <strong>${company.name}</strong> on SYNTRA as a <strong>${roleLabel}</strong>.
+      Click the button below to set up your account and get started.
+    </p>
+
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${inviteUrl}" style="display: inline-block; background: #e11d48; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; padding: 14px 32px; border-radius: 8px;">
+        Accept Invitation
+      </a>
+    </div>
+
+    <p style="color: #888; font-size: 13px; line-height: 1.6; margin: 0 0 8px;">
+      If the button doesn't work, copy and paste this link into your browser:
+    </p>
+    <p style="color: #666; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px 12px; border-radius: 6px; margin: 0 0 24px;">${inviteUrl}</p>
+
+    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+    <p style="color: #aaa; font-size: 12px; text-align: center; margin: 0;">
+      This invitation expires in 7 days. Any previous invitation link for this address is now invalid.
+    </p>
+  </div>
+</body>
+</html>`;
+
+      await sendEmail(smtp, inv.email, `Your invitation to join ${company.name} on SYNTRA (resent)`, html);
+    }
+  } catch (err) {
+    console.error("Failed to resend invitation email:", err);
+  }
+
+  res.json(inv);
+});
+
 // DELETE /api/invitations/:id
 router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
   const id = parseId(req.params["id"], res);

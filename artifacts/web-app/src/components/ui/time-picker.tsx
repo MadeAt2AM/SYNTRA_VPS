@@ -46,20 +46,56 @@ function ScrollCol({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // True while we're programmatically scrolling (selection changed from outside,
+  // e.g. a click) so the scroll listener below doesn't fight with it.
+  const programmaticScroll = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const idx = items.indexOf(selected);
     if (idx < 0) return;
-    el.scrollTop = idx * ITEM_H;
+    const targetTop = idx * ITEM_H;
+    if (Math.abs(el.scrollTop - targetTop) < 1) return;
+    programmaticScroll.current = true;
+    el.scrollTo({ top: targetTop, behavior: "smooth" });
+    // Clear the guard shortly after the smooth scroll should have finished.
+    window.setTimeout(() => {
+      programmaticScroll.current = false;
+    }, 300);
   }, [selected, items]);
+
+  // Let the user freely scroll (wheel, touch drag, trackpad, scrollbar drag)
+  // through the whole list — once scrolling settles, snap to and select the
+  // item nearest the centre line instead of requiring an exact click.
+  const handleScroll = () => {
+    if (programmaticScroll.current) return;
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      const el = ref.current;
+      if (!el) return;
+      const idx = Math.round(el.scrollTop / ITEM_H);
+      const clamped = Math.max(0, Math.min(items.length - 1, idx));
+      const item = items[clamped];
+      if (item !== undefined && item !== selected) {
+        onSelect(item);
+      } else {
+        // Already correct value — just make sure it's perfectly aligned.
+        el.scrollTo({ top: clamped * ITEM_H, behavior: "smooth" });
+      }
+    }, 120);
+  };
 
   return (
     <div
       ref={ref}
+      onScroll={handleScroll}
       className={cn(
         "h-[180px] overflow-y-auto overscroll-contain",
+        // Native scroll snapping keeps momentum/drag scrolling smooth while
+        // still settling on a whole item every time.
+        "snap-y snap-mandatory scroll-smooth",
         // Hide scrollbar but keep functionality
         "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,
@@ -76,7 +112,7 @@ function ScrollCol({
             type="button"
             onClick={() => onSelect(item)}
             className={cn(
-              "w-full flex items-center justify-center font-mono text-sm transition-all rounded-md",
+              "w-full flex items-center justify-center font-mono text-sm transition-all rounded-md snap-center",
               "h-9 cursor-pointer select-none",
               isSelected
                 ? "text-primary font-bold scale-110"

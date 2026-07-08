@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfWeek, addDays, addWeeks, subWeeks, parseISO } from "date-fns";
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send, RotateCcw, Clock, Settings2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Trash2, AlertTriangle, Ban, Send, RotateCcw, Clock, Settings2, X, CheckSquare, Square, XCircle } from "lucide-react";
 import { TimePicker } from "@/components/ui/time-picker";
 import { apiCheckLeave } from "@/lib/platform-api";
 
@@ -68,6 +68,12 @@ export default function SchedulePage() {
   const [publishingId, setPublishingId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reverting, setReverting] = useState(false);
+
+  // Multi-select mode — lets managers pick several shifts (across staff/days)
+  // and delete them in one action instead of one at a time.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Preset management state
   const [showPresets, setShowPresets] = useState(false);
@@ -133,6 +139,38 @@ export default function SchedulePage() {
     }
     return map;
   }, [availabilityList]);
+
+  function toggleSelectMode() {
+    setSelectMode(v => !v);
+    setSelectedIds(new Set());
+  }
+
+  function toggleShiftSelected(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    try {
+      await Promise.all(ids.map(id => deleteShift.mutateAsync({ id })));
+      qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+      toast({ title: `${ids.length} shift${ids.length > 1 ? "s" : ""} deleted` });
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } catch {
+      toast({ title: "Some shifts could not be deleted", variant: "destructive" });
+      qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   function openCreate(employeeId: number | null, dateStr: string) {
     setFormValues({ startTime: "09:00", endTime: "17:00", workplaceId: "", role: "", notes: "" });
@@ -346,7 +384,18 @@ export default function SchedulePage() {
               Presets
             </Button>
           )}
-          {isManager && draftCount > 0 && (
+          {isManager && (
+            <Button
+              variant={selectMode ? "secondary" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-mono"
+              onClick={toggleSelectMode}
+            >
+              {selectMode ? <XCircle className="h-3.5 w-3.5" /> : <CheckSquare className="h-3.5 w-3.5" />}
+              {selectMode ? "Cancel Select" : "Select Shifts"}
+            </Button>
+          )}
+          {isManager && draftCount > 0 && !selectMode && (
             <Button size="sm" className="font-semibold gap-1.5" onClick={publishAll} disabled={publishing}>
               <Send className="h-3.5 w-3.5" />
               {publishing ? "Publishing..." : `Publish All ${draftCount} Draft${draftCount > 1 ? "s" : ""}`}
@@ -432,6 +481,32 @@ export default function SchedulePage() {
         ))}
       </div>
 
+      {/* Bulk select action bar */}
+      {selectMode && (
+        <div className="sticky top-0 z-30 flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-semibold">
+            {selectedIds.size === 0
+              ? "Tap shifts to select them"
+              : `${selectedIds.size} shift${selectedIds.size > 1 ? "s" : ""} selected`}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())} disabled={selectedIds.size === 0}>
+              Clear
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 gap-1.5 text-xs font-semibold"
+              onClick={handleBulkDelete}
+              disabled={selectedIds.size === 0 || bulkDeleting}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {bulkDeleting ? "Deleting..." : `Delete Selected`}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Grid */}
       <div className="border border-border/50 rounded-xl overflow-hidden shadow-md bg-card">
         <div className="overflow-x-auto">
@@ -496,9 +571,16 @@ export default function SchedulePage() {
                           {cellShifts.map(shift => (
                             <button
                               key={shift.id}
-                              onClick={() => isManager && openEdit(shift)}
-                              className={`w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+                              onClick={() => isManager && (selectMode ? toggleShiftSelected(shift.id) : openEdit(shift))}
+                              className={`relative w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
                             >
+                              {selectMode && isManager && (
+                                <span className="absolute top-0.5 right-0.5">
+                                  {selectedIds.has(shift.id)
+                                    ? <CheckSquare className="w-3 h-3 text-primary" />
+                                    : <Square className="w-3 h-3 text-muted-foreground/50" />}
+                                </span>
+                              )}
                               <div className="truncate">{fmtTime(shift.startTime!)}–{fmtTime(shift.endTime!)}</div>
                               {shift.status === "draft" && <div className="text-[9px] font-normal opacity-60 uppercase tracking-widest">Draft</div>}
                             </button>
@@ -506,7 +588,7 @@ export default function SchedulePage() {
                           {isManager && !isApprovedLeave && (
                             <button
                               onClick={() => openCreate(emp.id, dateStr)}
-                              className="flex items-center justify-center h-6 w-full opacity-0 group-hover:opacity-100 rounded border border-dashed border-border/50 text-muted-foreground hover:border-primary hover:text-primary transition-all text-xs mt-auto"
+                              className="flex items-center justify-center h-6 w-full opacity-40 md:opacity-0 group-hover:opacity-100 rounded border border-dashed border-border/50 text-muted-foreground hover:border-primary hover:text-primary transition-all text-xs mt-auto"
                               title="Add shift"
                             >
                               <Plus className="w-3 h-3" />
@@ -532,13 +614,24 @@ export default function SchedulePage() {
                       <td key={i} className="border-r last:border-r-0 border-border/30 align-top p-1">
                         <div className="flex flex-col gap-0.5 min-h-[48px]">
                           {unassigned.map(shift => (
-                            <button key={shift.id} onClick={() => openEdit(shift)} className={`w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")}`}>
+                            <button
+                              key={shift.id}
+                              onClick={() => selectMode ? toggleShiftSelected(shift.id) : openEdit(shift)}
+                              className={`relative w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all hover:opacity-80 ${getShiftStatusClass(shift.status || "draft")} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                            >
+                              {selectMode && (
+                                <span className="absolute top-0.5 right-0.5">
+                                  {selectedIds.has(shift.id)
+                                    ? <CheckSquare className="w-3 h-3 text-primary" />
+                                    : <Square className="w-3 h-3 text-muted-foreground/50" />}
+                                </span>
+                              )}
                               <div className="truncate">{fmtTime(shift.startTime!)}–{fmtTime(shift.endTime!)}</div>
                             </button>
                           ))}
                           <button
                             onClick={() => openCreate(null, dateStr)}
-                            className="flex items-center justify-center h-6 w-full opacity-0 group-hover:opacity-100 rounded border border-dashed border-border/50 text-muted-foreground hover:border-primary hover:text-primary transition-all text-xs mt-auto"
+                            className="flex items-center justify-center h-6 w-full opacity-40 md:opacity-0 group-hover:opacity-100 rounded border border-dashed border-border/50 text-muted-foreground hover:border-primary hover:text-primary transition-all text-xs mt-auto"
                           >
                             <Plus className="w-3 h-3" />
                           </button>

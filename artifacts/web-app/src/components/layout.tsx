@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { NotificationBell } from "@/components/notification-bell";
 import {
   CalendarDays,
   Users,
@@ -54,11 +55,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="font-bold text-base tracking-tight leading-none">SYNTRA</div>
           <div className="text-[10px] text-sidebar-foreground/50 font-mono uppercase tracking-widest leading-tight mt-0.5">Workforce Mgmt</div>
         </div>
-        {onNavClick && (
-          <Button variant="ghost" size="icon" className="ml-auto h-7 w-7 text-sidebar-foreground" onClick={onNavClick}>
-            <X size={16} />
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-1 text-sidebar-foreground [&_button:hover]:bg-sidebar-accent [&_button:hover]:text-sidebar-foreground [&_button]:text-sidebar-foreground">
+          <NotificationBell />
+          {onNavClick && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-sidebar-foreground" onClick={onNavClick}>
+              <X size={16} />
+            </Button>
+          )}
+        </div>
       </div>
 
       <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">
@@ -122,16 +126,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="w-7 h-7 bg-sidebar-primary rounded flex items-center justify-center text-sidebar-primary-foreground font-bold text-xs">SY</div>
             <span className="font-bold text-base tracking-tight">SYNTRA</span>
           </div>
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground">
-                <Menu size={20} />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col">
-              {navContent(() => setMobileOpen(false))}
-            </SheetContent>
-          </Sheet>
+          <div className="flex items-center gap-1 text-sidebar-foreground [&_button:hover]:bg-sidebar-accent [&_button:hover]:text-sidebar-foreground [&_button]:text-sidebar-foreground">
+            <NotificationBell />
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground">
+                  <Menu size={20} />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col">
+                {navContent(() => setMobileOpen(false))}
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
 
         {/* Main Content */}
