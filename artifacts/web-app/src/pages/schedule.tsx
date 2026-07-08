@@ -80,6 +80,9 @@ export default function SchedulePage() {
   const [newPreset, setNewPreset] = useState({ name: "", startTime: "09:00", endTime: "17:00" });
   const [savingPreset, setSavingPreset] = useState(false);
 
+  // Employee read-only shift detail view
+  const [viewShift, setViewShift] = useState<Shift | null>(null);
+
   const { data: shifts = [] } = useListShifts({ query: { enabled: !!user?.companyId, queryKey: getListShiftsQueryKey() } });
   const { data: users = [] } = useListUsers({ query: { enabled: !!user?.companyId, queryKey: getListUsersQueryKey() } });
   const { data: workplaces = [] } = useListWorkplaces({ query: { enabled: !!user?.companyId, queryKey: getListWorkplacesQueryKey() } });
@@ -571,8 +574,11 @@ export default function SchedulePage() {
                           {cellShifts.map(shift => (
                             <button
                               key={shift.id}
-                              onClick={() => isManager && (selectMode ? toggleShiftSelected(shift.id) : openEdit(shift))}
-                              className={`relative w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                              onClick={() => isManager
+                                ? (selectMode ? toggleShiftSelected(shift.id) : openEdit(shift))
+                                : (shift.status === "published" ? setViewShift(shift) : undefined)
+                              }
+                              className={`relative w-full text-left text-[11px] font-semibold px-1.5 py-1 rounded border leading-tight transition-all ${getShiftStatusClass(shift.status || "draft")} ${isManager || shift.status === "published" ? "cursor-pointer hover:opacity-80" : "cursor-default"} ${selectMode && selectedIds.has(shift.id) ? "ring-2 ring-primary ring-offset-1" : ""}`}
                             >
                               {selectMode && isManager && (
                                 <span className="absolute top-0.5 right-0.5">
@@ -651,6 +657,68 @@ export default function SchedulePage() {
           Hover a row and click <strong>+</strong> to add a shift · Click a shift to edit · Background colours show staff leave and availability
         </p>
       )}
+
+      {/* Employee read-only shift detail */}
+      <Dialog open={!!viewShift} onOpenChange={(v) => !v && setViewShift(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-primary" />
+              Shift Details
+            </DialogTitle>
+            {viewShift && (
+              <DialogDescription className="font-mono text-xs">
+                {format(parseISO(viewShift.startTime!.split("T")[0]), "EEEE, MMMM d, yyyy")}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          {viewShift && (() => {
+            const wp = workplaces.find(w => w.id === viewShift.workplaceId);
+            return (
+              <div className="space-y-3 py-1">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
+                  <Clock className="w-5 h-5 text-primary flex-shrink-0" />
+                  <div>
+                    <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Time</div>
+                    <div className="font-bold text-base">{fmtTime(viewShift.startTime!)} – {fmtTime(viewShift.endTime!)}</div>
+                  </div>
+                </div>
+                {wp && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
+                    <span className="text-lg">📍</span>
+                    <div>
+                      <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Location</div>
+                      <div className="font-semibold">{wp.name}</div>
+                      {wp.address && <div className="text-xs text-muted-foreground mt-0.5">{wp.address}</div>}
+                    </div>
+                  </div>
+                )}
+                {viewShift.role && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
+                    <span className="text-lg">💼</span>
+                    <div>
+                      <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Role</div>
+                      <div className="font-semibold">{viewShift.role}</div>
+                    </div>
+                  </div>
+                )}
+                {viewShift.notes && (
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
+                    <span className="text-lg mt-0.5">📝</span>
+                    <div>
+                      <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Notes</div>
+                      <div className="text-sm mt-0.5">{viewShift.notes}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setViewShift(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Shift Dialog */}
       <Dialog open={modal.open} onOpenChange={(v) => !v && setModal(m => ({ ...m, open: false }))}>

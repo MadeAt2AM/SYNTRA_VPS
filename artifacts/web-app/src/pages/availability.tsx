@@ -138,7 +138,7 @@ export default function AvailabilityPage() {
                         <span className="text-xs font-semibold uppercase tracking-wider">{DAY_LABELS[i]}</span>
                         <span className="text-lg sm:text-xl font-bold mt-1">{format(d, 'd')}</span>
                         <span className={`text-[10px] mt-1 font-mono ${isAvailable ? 'text-primary' : 'text-muted-foreground/50'}`}>
-                          {isAvailable ? 'Available' : 'Off'}
+                          {isAvailable ? '✓' : '–'}
                         </span>
                       </button>
                     );
