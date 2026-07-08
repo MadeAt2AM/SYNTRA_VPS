@@ -539,9 +539,9 @@ export default function SchedulePage() {
                       <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-primary/20 flex items-center justify-center text-[9px] sm:text-[11px] font-bold text-primary flex-shrink-0">
                         {emp.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="min-w-0 hidden sm:block">
-                        <div className="font-semibold text-xs truncate">{emp.name.split(" ")[0]}</div>
-                        <div className="text-[10px] text-muted-foreground capitalize">{emp.role}</div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-[9px] sm:text-xs truncate">{emp.name.split(" ")[0]}</div>
+                        <div className="hidden sm:block text-[10px] text-muted-foreground capitalize">{emp.role}</div>
                       </div>
                     </div>
                   </td>
