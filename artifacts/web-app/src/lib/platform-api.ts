@@ -39,6 +39,13 @@ export interface CreateCompanyResult {
     role: string;
     mustChangePassword: boolean;
   };
+  /**
+   * Plaintext temp password echoed by POST /api/platform/companies exactly
+   * once (in the 201 response). It is bcrypt-hashed in the DB and never
+   * re-served by GET endpoints — the platform admin must capture it now
+   * and share it with the new tenant owner.
+   */
+  tempPassword: string;
 }
 
 export function usePlatformStats() {

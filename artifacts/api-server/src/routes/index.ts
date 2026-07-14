@@ -16,6 +16,7 @@ import shiftSwapsRouter from "./shift-swaps";
 import shiftOffersRouter from "./shift-offers";
 import shiftReplacementsRouter from "./shift-replacements";
 import notificationsRouter from "./notifications";
+import calendarRouter from "./calendar";
 import { z } from "zod";
 import { sendEmail } from "../lib/email";
 import { db, platformSettings } from "@workspace/db";
@@ -40,6 +41,7 @@ router.use("/shift-swaps", shiftSwapsRouter);
 router.use("/shift-offers", shiftOffersRouter);
 router.use("/shift-replacements", shiftReplacementsRouter);
 router.use("/notifications", notificationsRouter);
+router.use("/calendar", calendarRouter);
 
 // Public contact/enquiry endpoint
 const contactSchema = z.object({

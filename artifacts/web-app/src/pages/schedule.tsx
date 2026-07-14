@@ -37,6 +37,7 @@ import {
   type ShiftSwap, type ShiftOffer, type ShiftReplacement,
 } from "@/lib/notifications-api";
 import { generateIcal, downloadIcal } from "@/lib/ical";
+import { openNativeCalendar, downloadIcalFallback } from "@/lib/calendar-deeplink";
 import { exportMonthlyRosterCsv, generateTemplateCsv, parseRosterCsv } from "@/lib/roster-csv";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -428,6 +429,26 @@ export default function SchedulePage() {
   // On mobile, try the native share sheet so the .ics can be opened straight in a calendar app;
   // otherwise fall back to a plain download.
   async function handleIcalExport() {
+    try {
+      // Primary path: native deep-link via webcal:// / https:// — opens the
+      // user's calendar app directly instead of downloading a .ics file.
+      // See lib/calendar-deeplink.ts for the full platform matrix.
+      await openNativeCalendar();
+      toast({
+        title: "Opening your calendar…",
+        description: "If nothing happens, your device has no calendar app registered for .ics URLs — use the in-app menu to download instead.",
+      });
+      return;
+    } catch (err: any) {
+      // Mint can fail if the user is signed out or the API rejects the
+      // request. Fall back to a one-shot download so the user is never
+      // left without an option.
+      // eslint-disable-next-line no-console
+      console.warn("Calendar deep-link failed, falling back to download", err);
+    }
+
+    // Fallback path: original client-side generation + browser download.
+    // Preserved for offline / restricted environments.
     const myShifts = shifts.filter(s => {
       if (s.status !== "published") return false;
       if (!isManager) return s.employeeId === user?.id;
@@ -442,20 +463,7 @@ export default function SchedulePage() {
       };
     });
     const ical = generateIcal(calShifts, `${(company as any)?.name ?? "SYNTRA"} Shifts`);
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile && typeof navigator.share === "function") {
-      try {
-        const file = new File([ical], "syntra-shifts.ics", { type: "text/calendar" });
-        if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: "My Shifts", text: "Add these shifts to your calendar" });
-          return;
-        }
-      } catch (err: any) {
-        if (err?.name === "AbortError") return; // user cancelled the share sheet
-        // fall through to download on any other failure
-      }
-    }
-    downloadIcal(ical, "syntra-shifts.ics");
+    downloadIcalFallback(ical, "syntra-shifts.ics");
     toast({ title: "Calendar file downloaded", description: `${calShifts.length} shift${calShifts.length !== 1 ? "s" : ""} exported — open the file to add them to your calendar.` });
   }
 
@@ -726,14 +734,17 @@ export default function SchedulePage() {
             </Button>
           </div>
 
-          {/* Add to Calendar */}
+          {/* Add to Calendar — deep-links to the native calendar app via
+              webcal:// (iOS/macOS/Android) or opens the .ics in the browser
+              (Windows/Linux). Falls back to a one-shot download if neither
+              path is available. */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-mono" onClick={handleIcalExport}>
                 <CalendarPlus className="h-3.5 w-3.5" /> Add to Calendar
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Adds every published shift to your calendar app (Apple/Google Calendar)</TooltipContent>
+            <TooltipContent>Opens your calendar app with every published shift (Apple Calendar, Google Calendar, Outlook)</TooltipContent>
           </Tooltip>
 
           {/* Manager tools */}

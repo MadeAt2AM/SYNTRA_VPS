@@ -72,6 +72,13 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   passwordResetToken: text("password_reset_token"),
   passwordResetExpiry: timestamp("password_reset_expiry"),
+  // Long-lived opaque token used to authenticate the iCal subscription URL
+  // (GET /api/calendar/shifts.ics?token=...). Calendar apps re-fetch this URL
+  // on every sync — they can't carry a Bearer header — so the token lives in
+  // the URL and is treated as a credential. Minted on first "Add to Calendar"
+  // click; user can revoke via DELETE /api/calendar/token.
+  webcalToken: text("webcal_token"),
+  webcalTokenCreatedAt: timestamp("webcal_token_created_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
