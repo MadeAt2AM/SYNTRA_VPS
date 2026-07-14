@@ -58,6 +58,11 @@ services:
       dockerfile: deploy/docker/Dockerfile.api
     container_name: syntra_api
     restart: unless-stopped
+    # Load additional env vars from the secrets file (REPLIT_DOMAINS,
+    # REPLIT_DEV_DOMAIN, future additions). The explicit `environment:`
+    # block below takes precedence. See docs/CUSTOM_DOMAIN_SETUP.md.
+    env_file:
+      - /srv/secrets/syntra.env
     environment:
       NODE_ENV:             production
       PORT:                 8080
