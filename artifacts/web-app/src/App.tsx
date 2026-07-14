@@ -23,6 +23,7 @@ import WorkplacesPage from "@/pages/workplaces";
 import InvitationsPage from "@/pages/invitations";
 import SettingsPage from "@/pages/settings";
 import LegalPage from "@/pages/legal";
+import { ErrorBoundary } from "@/components/error-boundary";
 import AvailabilityPage from "@/pages/availability";
 
 const queryClient = new QueryClient();
@@ -229,16 +230,18 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

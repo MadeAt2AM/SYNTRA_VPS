@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Mail, Phone, Building } from "lucide-react";
+import { ChevronDown, Mail } from "lucide-react";
 
 function FadeIn({ children, delay = 0, className = "" }: { children: React.ReactNode, delay?: number, className?: string }) {
   return (
@@ -51,7 +51,7 @@ const FOOTER = (
   </footer>
 );
 
-export default function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
+export function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
   const isTerms = kind === "terms";
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -97,7 +97,7 @@ export default function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
             <p className="text-muted-foreground mb-8 max-w-2xl">
               We try to keep these documents readable. If anything's unclear or you want to exercise any of the rights described above, contact us.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-1 max-w-md gap-4">
               <a href="mailto:legal@madeat2am.in" className="flex items-center gap-3 p-4 rounded-xl border border-border bg-background hover:border-primary transition-colors">
                 <Mail className="h-5 w-5 text-primary" />
                 <div>
@@ -105,20 +105,6 @@ export default function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
                   <div className="font-semibold text-sm">legal@madeat2am.in</div>
                 </div>
               </a>
-              <a href="tel:+6560000000" className="flex items-center gap-3 p-4 rounded-xl border border-border bg-background hover:border-primary transition-colors">
-                <Phone className="h-5 w-5 text-primary" />
-                <div>
-                  <div className="text-xs font-bold text-muted-foreground uppercase">Phone</div>
-                  <div className="font-semibold text-sm">+65 6000 0000</div>
-                </div>
-              </a>
-              <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-background">
-                <Building className="h-5 w-5 text-primary" />
-                <div>
-                  <div className="text-xs font-bold text-muted-foreground uppercase">Operator</div>
-                  <div className="font-semibold text-sm">MadeAt2AM Pte Ltd</div>
-                </div>
-              </div>
             </div>
           </FadeIn>
         </div>
@@ -150,7 +136,7 @@ function TermsBody() {
   return (
     <>
       <H2>1. Agreement</H2>
-      <P>These Terms & Conditions govern your use of SYNTRA, a workforce management platform operated by MadeAt2AM Pte Ltd ("MadeAt2AM", "we", "us"). By creating an account or using the platform, you agree to these terms.</P>
+      <P>These Terms & Conditions govern your use of SYNTRA. By creating an account or using the platform, you agree to these terms.</P>
 
       <H2>2. The service</H2>
       <P>SYNTRA provides scheduling, shift management, time tracking, leave management, and reporting tools for small and medium-sized teams. Features are described at <Link href="/" className="text-primary hover:underline">syntra.terrybot.top</Link> and may evolve over time.</P>
@@ -184,7 +170,7 @@ function TermsBody() {
       <P>We aim for high availability but do not guarantee uninterrupted access. We may perform maintenance, which we'll announce in advance where reasonably possible. We are not liable for losses caused by downtime beyond our reasonable control.</P>
 
       <H2>8. Intellectual property</H2>
-      <P>SYNTRA, the MadeAt2AM logo, and the platform design are owned by MadeAt2AM Pte Ltd. You may not copy or redistribute them without written permission.</P>
+      <P>The SYNTRA brand and platform design are owned by the SYNTRA operator. You may not copy or redistribute them without written permission.</P>
 
       <H2>9. Termination</H2>
       <P>You may stop using SYNTRA at any time. We may suspend or terminate accounts that violate these terms. On termination, your right to use the platform ends immediately.</P>
@@ -208,7 +194,7 @@ function PrivacyBody() {
   return (
     <>
       <H2>1. What this covers</H2>
-      <P>This Privacy Policy explains how MadeAt2AM Pte Ltd ("we", "us") collects, uses, stores, and protects personal data when you use SYNTRA. It applies to the platform at syntra.terrybot.top and any custom domains operated by SYNTRA.</P>
+      <P>This Privacy Policy explains how personal data is collected, used, stored, and protected when you use SYNTRA. It applies to the platform at syntra.terrybot.top and any custom domains operated by SYNTRA.</P>
 
       <H2>2. Data we collect</H2>
       <H3>Account data</H3>
