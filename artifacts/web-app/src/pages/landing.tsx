@@ -556,8 +556,8 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-8 text-sm font-semibold text-muted-foreground">
              <Link href="/login" className="hover:text-foreground transition-colors">Platform Login</Link>
-             <a href="#faq" className="hover:text-foreground transition-colors">Support</a>
-             <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
+             <Link href="/legal/terms" className="hover:text-foreground transition-colors">Terms</Link>
+             <Link href="/legal/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
           </div>
           <div className="text-sm text-muted-foreground font-medium">
             © {new Date().getFullYear()} SYNTRA. All rights reserved.

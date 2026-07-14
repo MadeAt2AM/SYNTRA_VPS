@@ -6,6 +6,7 @@ import { users, invitations, companies } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, signToken } from "../middlewares/auth";
 import { sendEmail, SmtpConfig } from "../lib/email";
+import { loginIpLimiter, loginEmailLimiter } from "../middlewares/rate-limit";
 import { renderBrandedEmail } from "../lib/email-templates";
 import { z } from "zod";
 
@@ -150,7 +151,7 @@ router.post("/register", async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post("/login", async (req, res) => {
+router.post("/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });

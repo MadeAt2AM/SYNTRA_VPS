@@ -22,6 +22,7 @@ import TimeLogsPage from "@/pages/time-logs";
 import WorkplacesPage from "@/pages/workplaces";
 import InvitationsPage from "@/pages/invitations";
 import SettingsPage from "@/pages/settings";
+import LegalPage from "@/pages/legal";
 import AvailabilityPage from "@/pages/availability";
 
 const queryClient = new QueryClient();
@@ -216,6 +217,9 @@ function Router() {
             </RequireRole>
           </RequireAuth>
         </Route>
+
+        <Route path="/legal/terms"><LegalPage kind="terms" /></Route>
+        <Route path="/legal/privacy"><LegalPage kind="privacy" /></Route>
 
         <Route component={NotFound} />
       </Switch>

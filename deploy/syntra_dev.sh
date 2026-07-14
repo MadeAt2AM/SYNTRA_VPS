@@ -84,10 +84,22 @@ ensure_dns() {
 }
 
 write_caddy() {
-  yellow "  → writing Caddy site block for ${PROJ_NAME}.${DOMAIN} (nginx :80 on web net)"
+  yellow "  → writing Caddy site block for ${PROJ_NAME}.${DOMAIN} with security headers"
   cat > "$Caddy_FILE" <<EOF
 ${PROJ_NAME}.${DOMAIN} {
     reverse_proxy ${PROJ_NAME}-web:80
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        Cross-Origin-Opener-Policy "same-origin"
+        -X-Powered-By
+        -Server
+    }
 }
 EOF
 }
