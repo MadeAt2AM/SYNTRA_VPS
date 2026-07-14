@@ -32,7 +32,7 @@ RUN pnpm --filter @workspace/api-server run build
 
 FROM node:20-bookworm-slim AS deps
 WORKDIR /runtime
-RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"dependencies":{"nodemailer":"^9.0.3"}}' > package.json \
+RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"dependencies":{"nodemailer":"^9.0.3","express-rate-limit":"^7.4.1"}}' > package.json \
     && npm install --production --no-fund --no-audit
 
 FROM node:20-bookworm-slim AS runner
