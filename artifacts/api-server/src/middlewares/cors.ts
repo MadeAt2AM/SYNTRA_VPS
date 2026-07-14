@@ -22,7 +22,10 @@ export function buildCors(): ReturnType<typeof cors> {
       // Same-origin requests (no Origin header) and curl/server-to-server are allowed.
       if (!origin) return cb(null, true);
       if (allowed.includes(origin)) return cb(null, true);
-      return cb(new Error(`Origin ${origin} not allowed by CORS`));
+      // Don't throw — return an explicit false so the request never reaches
+      // the handler. Browsers will see the missing Access-Control-Allow-Origin
+      // and block the response; non-browser clients get a CORS error.
+      return cb(null, false);
     },
     credentials: false, // we use Bearer tokens, not cookies
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
