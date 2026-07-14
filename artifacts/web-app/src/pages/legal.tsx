@@ -51,7 +51,7 @@ const FOOTER = (
   </footer>
 );
 
-export function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
+export default function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
   const isTerms = kind === "terms";
   return (
     <div className="min-h-screen bg-background text-foreground">
