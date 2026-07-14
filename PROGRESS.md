@@ -1,6 +1,6 @@
 # Workforce Scheduling App — Build Progress
 
-Last updated: 2026-07-08
+Last updated: 2026-07-15
 
 ---
 
@@ -34,6 +34,19 @@ Last updated: 2026-07-08
 - [x] TypeScript fixes: parseId helper (safe int parse + 400 response), all req.params typed safely ✓
 - [x] Remove drizzle-zod (incompatible with zod 3.25.x) — use $inferSelect/$inferInsert ✓
 - [x] TypeScript clean — zero errors across libs + api-server ✓
+
+## ✅ Calendar deep-link (2026-07-15)
+
+- [x] `users.webcal_token` + `webcal_token_created_at` columns — drizzle push applied to live Postgres
+- [x] `GET /api/calendar/shifts.ics?token=...` — serves `text/calendar` with `Content-Disposition: inline` (NOT attachment — that's the bit that stops browsers from downloading instead of handing off to a calendar handler)
+- [x] `POST /api/calendar/token` — mints long-lived UUID, cached in localStorage
+- [x] `DELETE /api/calendar/token` — revoke (lost phone / offboarding)
+- [x] Frontend `lib/calendar-deeplink.ts` — tries `webcal://` deep-link first (iOS/macOS/Android), then `https://` inline, then Google Calendar import, then client-side download fallback
+- [x] RFC 5545 VCALENDAR output verified — CRLF line endings, UTC times, escaped text, stable UIDs, line folding at 75 octets
+- [x] Live round-trip on prod: 200 OK with proper headers, `file` recognizes it as `iCalendar calendar file`, revoke flow returns 401 after DELETE
+- [x] Scope authorization: employees see own + unassigned published shifts, managers+admins can request `scope=company` for full roster
+- [x] Draft shifts never leak — `status = 'published'` filter is hardcoded
+- [x] Schema reference written — `docs/SCHEMA.md` covers the lifecycle, security model, and index guidance
 
 ---
 
