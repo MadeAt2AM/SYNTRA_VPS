@@ -7,6 +7,7 @@ import { parseId } from "../lib/parse-id";
 import { z } from "zod";
 import crypto from "crypto";
 import { sendEmail, SmtpConfig } from "../lib/email";
+import { renderBrandedEmail } from "../lib/email-templates";
 
 const router = Router();
 router.use(requireAuth);
@@ -74,7 +75,7 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
   // Try to send invitation email using company's SMTP config
   try {
     const [company] = await db
-      .select({ name: companies.name, smtpConfig: companies.smtpConfig })
+      .select({ name: companies.name, smtpConfig: companies.smtpConfig, logoUrl: companies.logoUrl, logoText: companies.logoText })
       .from(companies)
       .where(eq(companies.id, companyId))
       .limit(1);
@@ -87,20 +88,12 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
       const inviteUrl = `${appUrl}/accept-invite?token=${token}&email=${encodeURIComponent(parsed.data.email)}`;
       const roleLabel = targetRole.charAt(0).toUpperCase() + targetRole.slice(1);
 
-      const html = `
-<!DOCTYPE html>
-<html>
-<body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
-  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 40px; border: 1px solid #e5e5e5;">
-    <div style="text-align: center; margin-bottom: 32px;">
-      <div style="display: inline-block; background: #e11d48; color: #fff; font-weight: 700; font-size: 18px; letter-spacing: 2px; padding: 10px 18px; border-radius: 8px;">SY</div>
-      <h2 style="color: #111; margin: 16px 0 4px; font-size: 22px; font-weight: 700;">SYNTRA</h2>
-      <p style="color: #666; font-size: 12px; margin: 0; letter-spacing: 2px; text-transform: uppercase;">Workforce Management</p>
-    </div>
-
+      const html = renderBrandedEmail(
+        { name: company.name, logoUrl: company.logoUrl, logoText: company.logoText },
+        `
     <h3 style="color: #111; font-size: 18px; font-weight: 600; margin: 0 0 12px;">You've been invited to join ${company.name}</h3>
     <p style="color: #444; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
-      You have been invited to join <strong>${company.name}</strong> on SYNTRA as a <strong>${roleLabel}</strong>.
+      You have been invited to join <strong>${company.name}</strong> as a <strong>${roleLabel}</strong>.
       Click the button below to set up your account and get started.
     </p>
 
@@ -115,18 +108,15 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
     </p>
     <p style="color: #666; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px 12px; border-radius: 6px; margin: 0 0 24px;">${inviteUrl}</p>
 
-    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
     <p style="color: #aaa; font-size: 12px; text-align: center; margin: 0;">
       This invitation expires in 7 days. If you did not expect this invitation, you can ignore this email.
-    </p>
-  </div>
-</body>
-</html>`;
+    </p>`,
+      );
 
-      await sendEmail(smtp, parsed.data.email, `You're invited to join ${company.name} on SYNTRA`, html);
+      await sendEmail(smtp, parsed.data.email, `You're invited to join ${company.name}`, html);
     }
   } catch (err) {
-    console.error("Failed to send invitation email:", err);
+    req.log?.warn({ err }, "Failed to send invitation email");
   }
 
   res.status(201).json(inv);
@@ -203,7 +193,7 @@ router.post("/:id/resend", requireRole("admin", "manager"), async (req, res) => 
   // Try to resend invitation email using company's SMTP config
   try {
     const [company] = await db
-      .select({ name: companies.name, smtpConfig: companies.smtpConfig })
+      .select({ name: companies.name, smtpConfig: companies.smtpConfig, logoUrl: companies.logoUrl, logoText: companies.logoText })
       .from(companies)
       .where(eq(companies.id, companyId))
       .limit(1);
@@ -216,20 +206,12 @@ router.post("/:id/resend", requireRole("admin", "manager"), async (req, res) => 
       const inviteUrl = `${appUrl}/accept-invite?token=${token}&email=${encodeURIComponent(inv.email)}`;
       const roleLabel = inv.role.charAt(0).toUpperCase() + inv.role.slice(1);
 
-      const html = `
-<!DOCTYPE html>
-<html>
-<body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
-  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 40px; border: 1px solid #e5e5e5;">
-    <div style="text-align: center; margin-bottom: 32px;">
-      <div style="display: inline-block; background: #e11d48; color: #fff; font-weight: 700; font-size: 18px; letter-spacing: 2px; padding: 10px 18px; border-radius: 8px;">SY</div>
-      <h2 style="color: #111; margin: 16px 0 4px; font-size: 22px; font-weight: 700;">SYNTRA</h2>
-      <p style="color: #666; font-size: 12px; margin: 0; letter-spacing: 2px; text-transform: uppercase;">Workforce Management</p>
-    </div>
-
+      const html = renderBrandedEmail(
+        { name: company.name, logoUrl: company.logoUrl, logoText: company.logoText },
+        `
     <h3 style="color: #111; font-size: 18px; font-weight: 600; margin: 0 0 12px;">You've been invited to join ${company.name}</h3>
     <p style="color: #444; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
-      This is a fresh invitation link to join <strong>${company.name}</strong> on SYNTRA as a <strong>${roleLabel}</strong>.
+      This is a fresh invitation link to join <strong>${company.name}</strong> as a <strong>${roleLabel}</strong>.
       Click the button below to set up your account and get started.
     </p>
 
@@ -244,18 +226,15 @@ router.post("/:id/resend", requireRole("admin", "manager"), async (req, res) => 
     </p>
     <p style="color: #666; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px 12px; border-radius: 6px; margin: 0 0 24px;">${inviteUrl}</p>
 
-    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
     <p style="color: #aaa; font-size: 12px; text-align: center; margin: 0;">
       This invitation expires in 7 days. Any previous invitation link for this address is now invalid.
-    </p>
-  </div>
-</body>
-</html>`;
+    </p>`,
+      );
 
-      await sendEmail(smtp, inv.email, `Your invitation to join ${company.name} on SYNTRA (resent)`, html);
+      await sendEmail(smtp, inv.email, `Your invitation to join ${company.name} (resent)`, html);
     }
   } catch (err) {
-    console.error("Failed to resend invitation email:", err);
+    req.log?.warn({ err }, "Failed to resend invitation email");
   }
 
   res.json(inv);

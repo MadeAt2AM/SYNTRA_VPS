@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useLogin } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,15 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { toast } = useToast();
   const loginMutation = useLogin();
+  const { data: branding } = useBranding();
+  const brandName = (branding?.branded ? branding.name : "SYNTRA") ?? "SYNTRA";
+  const brandBadge = branding?.branded && branding.logoUrl
+    ? <img src={branding.logoUrl} alt={brandName} className="mx-auto mb-2 max-h-12 max-w-[160px]" />
+    : (
+      <div className="mx-auto w-12 h-12 bg-primary text-primary-foreground rounded-xl flex items-center justify-center mb-2 shadow-lg font-bold text-lg">
+        {branding?.branded ? (branding.logoText || brandName.slice(0, 2).toUpperCase()) : "SY"}
+      </div>
+    );
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -56,12 +66,10 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-md shadow-2xl border-border/50 bg-card/80 backdrop-blur-sm z-10">
         <CardHeader className="space-y-3 pb-6 text-center">
-          <div className="mx-auto w-12 h-12 bg-primary text-primary-foreground rounded-xl flex items-center justify-center mb-2 shadow-lg font-bold text-lg">
-            SY
-          </div>
-          <CardTitle className="text-2xl font-bold font-sans tracking-tight">SYNTRA</CardTitle>
+          {brandBadge}
+          <CardTitle className="text-2xl font-bold font-sans tracking-tight">{brandName}</CardTitle>
           <CardDescription className="text-muted-foreground font-mono text-xs uppercase tracking-wider">
-            Workforce Management Platform
+            {branding?.branded ? "Workforce Management" : "Workforce Management Platform"}
           </CardDescription>
         </CardHeader>
         <CardContent>

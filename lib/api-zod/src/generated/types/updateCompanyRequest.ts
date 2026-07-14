@@ -18,4 +18,6 @@ export interface UpdateCompanyRequest {
   weekStartDay?: number;
   overtimeThreshold?: string;
   logoUrl?: string | null;
+  logoText?: string | null;
+  currency?: string;
 }

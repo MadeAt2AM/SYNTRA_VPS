@@ -65,6 +65,7 @@ export default function LeavePage() {
           <h1 className="text-4xl font-bold font-sans tracking-tight text-foreground">Leave Requests</h1>
           <p className="text-muted-foreground mt-2 font-mono text-sm uppercase tracking-widest">Time off management</p>
         </div>
+        {user?.role !== 'admin' && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="font-semibold"><Plus className="w-4 h-4 mr-2" /> Request Time Off</Button>
@@ -149,6 +150,7 @@ export default function LeavePage() {
             </Form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card className="border-border/50 shadow-md bg-card/80 backdrop-blur">

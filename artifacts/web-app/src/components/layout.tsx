@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useGetCompany, getGetCompanyQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -22,6 +23,64 @@ import {
 
 const PUBLIC_PATHS = ["/", "/login", "/register", "/change-password", "/forgot-password", "/reset-password"];
 
+function CompanyLogo({ companyId }: { companyId: number | null | undefined }) {
+  const { data: company } = useGetCompany(companyId || 0, {
+    query: { enabled: !!companyId, queryKey: getGetCompanyQueryKey(companyId || 0) },
+  });
+
+  if (!companyId) {
+    return (
+      <>
+        <div className="w-9 h-9 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shadow flex-shrink-0">
+          SY
+        </div>
+        <div>
+          <div className="font-bold text-base tracking-tight leading-none">SYNTRA</div>
+          <div className="text-[10px] text-sidebar-foreground/50 font-mono uppercase tracking-widest leading-tight mt-0.5">Workforce Mgmt</div>
+        </div>
+      </>
+    );
+  }
+
+  if (company?.logoUrl) {
+    return (
+      <>
+        <img src={company.logoUrl} alt={company.name} className="w-9 h-9 rounded-lg object-contain bg-white flex-shrink-0" />
+        <div>
+          <div className="font-bold text-base tracking-tight leading-none truncate max-w-[110px]">{company.logoText || company.name}</div>
+          <div className="text-[10px] text-sidebar-foreground/50 font-mono uppercase tracking-widest leading-tight mt-0.5">Workforce Mgmt</div>
+        </div>
+      </>
+    );
+  }
+
+  if (company?.logoText) {
+    return (
+      <>
+        <div className="w-9 h-9 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shadow flex-shrink-0">
+          {company.logoText.slice(0, 2).toUpperCase()}
+        </div>
+        <div>
+          <div className="font-bold text-base tracking-tight leading-none truncate max-w-[110px]">{company.logoText}</div>
+          <div className="text-[10px] text-sidebar-foreground/50 font-mono uppercase tracking-widest leading-tight mt-0.5">Workforce Mgmt</div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="w-9 h-9 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shadow flex-shrink-0">
+        {company ? company.name.slice(0, 2).toUpperCase() : "SY"}
+      </div>
+      <div>
+        <div className="font-bold text-base tracking-tight leading-none truncate max-w-[110px]">{company?.name || "SYNTRA"}</div>
+        <div className="text-[10px] text-sidebar-foreground/50 font-mono uppercase tracking-widest leading-tight mt-0.5">Workforce Mgmt</div>
+      </div>
+    </>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout, isLoading } = useAuth();
   const [location] = useLocation();
@@ -32,13 +91,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-muted-foreground font-mono">Loading SYNTRA...</span>
+          <span className="text-sm text-muted-foreground font-mono">Loading...</span>
         </div>
       </div>
     );
   }
 
-  // Public pages get no sidebar
   if (!user || PUBLIC_PATHS.includes(location)) {
     return <>{children}</>;
   }
@@ -48,13 +106,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navContent = (onNavClick?: () => void) => (
     <>
       <div className="p-5 flex items-center gap-3 border-b border-sidebar-border">
-        <div className="w-9 h-9 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shadow">
-          SY
-        </div>
-        <div>
-          <div className="font-bold text-base tracking-tight leading-none">SYNTRA</div>
-          <div className="text-[10px] text-sidebar-foreground/50 font-mono uppercase tracking-widest leading-tight mt-0.5">Workforce Mgmt</div>
-        </div>
+        <CompanyLogo companyId={user.companyId} />
         <div className="ml-auto flex items-center gap-1 text-sidebar-foreground [&_button:hover]:bg-sidebar-accent [&_button:hover]:text-sidebar-foreground [&_button]:text-sidebar-foreground">
           <NotificationBell />
           {onNavClick && (
@@ -141,7 +193,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Main Content */}
         <main className="flex-1 overflow-auto">
           <div className="p-4 md:p-8 max-w-7xl mx-auto">
             {children}

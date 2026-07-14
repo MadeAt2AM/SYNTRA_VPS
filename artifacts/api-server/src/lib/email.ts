@@ -10,18 +10,25 @@ export interface SmtpConfig {
 }
 
 function buildTransport(smtp: SmtpConfig) {
+  const isStartTLS = !smtp.secure && (smtp.port === 587 || smtp.port === 25);
   return nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
+    // requireTLS forces STARTTLS on port 587/25; prevents plain-text fallback.
+    // Without this Gmail rejects the connection.
+    requireTLS: isStartTLS,
     auth: { user: smtp.user, pass: smtp.pass },
-    // TLS certificate validation is enforced by default.
-    // Only disable if your SMTP host uses a self-signed cert AND you
-    // explicitly set SMTP_REJECT_UNAUTHORIZED=false in your environment.
     tls: {
+      // Only disable cert verification when explicitly opted out.
       rejectUnauthorized: process.env["SMTP_REJECT_UNAUTHORIZED"] !== "false",
+      // Gmail and many providers need TLS 1.2+
+      minVersion: "TLSv1.2",
     },
-  });
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
+  } as any);
 }
 
 export async function sendEmail(

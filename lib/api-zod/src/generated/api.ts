@@ -173,11 +173,16 @@ export const GetCompanyResponse = zod.object({
   "status": zod.string(),
   "plan": zod.string(),
   "logoUrl": zod.string().nullish(),
+  "logoText": zod.string().nullish(),
+  "currency": zod.string(),
   "address": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "timezone": zod.string(),
   "weekStartDay": zod.number(),
   "overtimeThreshold": zod.string(),
+  "customDomain": zod.string().nullish().describe('Custom domain the company has pointed at the platform (platform-admin managed).'),
+  "domainStatus": zod.enum(['none', 'pending', 'verified', 'failed']).optional(),
+  "domainVerifiedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date().optional()
 })
 
@@ -201,7 +206,9 @@ export const UpdateCompanyBody = zod.object({
   "timezone": zod.string().optional(),
   "weekStartDay": zod.number().min(updateCompanyBodyWeekStartDayMin).max(updateCompanyBodyWeekStartDayMax).optional(),
   "overtimeThreshold": zod.string().optional(),
-  "logoUrl": zod.string().nullish()
+  "logoUrl": zod.string().nullish(),
+  "logoText": zod.string().nullish(),
+  "currency": zod.string().optional()
 })
 
 export const UpdateCompanyResponse = zod.object({
@@ -210,11 +217,16 @@ export const UpdateCompanyResponse = zod.object({
   "status": zod.string(),
   "plan": zod.string(),
   "logoUrl": zod.string().nullish(),
+  "logoText": zod.string().nullish(),
+  "currency": zod.string(),
   "address": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "timezone": zod.string(),
   "weekStartDay": zod.number(),
   "overtimeThreshold": zod.string(),
+  "customDomain": zod.string().nullish().describe('Custom domain the company has pointed at the platform (platform-admin managed).'),
+  "domainStatus": zod.enum(['none', 'pending', 'verified', 'failed']).optional(),
+  "domainVerifiedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date().optional()
 })
 

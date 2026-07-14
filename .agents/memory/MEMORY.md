@@ -1,5 +1,10 @@
+- [SYNTRA VPS deployment repo](syntra-vps-repo.md) — this repo deploys to a VPS; never change ports, Docker/Nginx configs, or any infra/env settings
 - [SYNTRA stack & seeding](shiftwise-setup.md) — pnpm monorepo, Express 5 + Drizzle + JWT; schema already pushed; seed data inserted; bcrypt hash generation must use ShellExec not CodeExecution sandbox
 - [SYNTRA 4 roles](shiftwise-roles.md) — platform_admin (no company_id, /api/platform/* only), admin (owner), manager, employee; role guards added in App.tsx via RequireAuth+RequireRole components
 - [SYNTRA api-server dependencies](syntra-api-deps.md) — date-fns must be installed in api-server package separately; nodemailer installed for SMTP; api-server uses esbuild bundle so all imports must be resolvable at build time
 - [SYNTRA mustChangePassword flow](syntra-must-change-password.md) — boolean DB column must_change_password; login returns it in user object; localStorage key "must_change_password" used as fallback; App.tsx RequireAuth guard redirects to /change-password; cleared after POST /api/auth/change-password
 - [SYNTRA invitation role-grant enforcement](syntra-role-grants.md) — any invitation mutation (resend, revive, etc.) must recheck maxGrantableRole against the invite's role, not just creation
+- [SYNTRA codegen drift](syntra-codegen-drift.md) — openapi.yaml can silently drift from schema/routes; always diff spec vs new DB columns/routes and re-run codegen before trusting a single-package typecheck
+- [SYNTRA api-server restart requirement](syntra-api-server-restart.md) — dev script builds once (no watch); restart the workflow after any backend src change or new routes 404 as if missing
+- [SYNTRA shift swap/offer/replacement architecture](syntra-shift-marketplace.md) — 3 separate table/route pairs outside openapi codegen; notification bell deep-links to /schedule?panel=X
+- [SYNTRA custom domain & branded email architecture](syntra-custom-domain-branding.md) — per-company DNS verification vs. Replit's deployment domain system; shared renderBrandedEmail helper for all company emails

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { shifts, users, workplaces, leaveRequests } from "@workspace/db";
+import { shifts, users, workplaces, leaveRequests, availability, notifications } from "@workspace/db";
 import { eq, and, gte, lte, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { parseId } from "../lib/parse-id";
@@ -18,6 +18,8 @@ const shiftSchema = z.object({
   offerStatus: z.string().optional().nullable(),
   role: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  isSuggested: z.boolean().optional(),
+  suggestedData: z.unknown().optional().nullable(),
 });
 
 async function validateCrossRefs(
@@ -27,11 +29,13 @@ async function validateCrossRefs(
 ): Promise<string | null> {
   if (employeeId != null) {
     const [emp] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, role: users.role })
       .from(users)
       .where(and(eq(users.id, employeeId), eq(users.companyId, companyId)))
       .limit(1);
     if (!emp) return `Employee ${employeeId} not found in this company`;
+    // Admins are company owners, not scheduled staff — shifts cannot be assigned to them.
+    if (emp.role === "admin") return `Cannot assign shifts to an admin — admins are owners, not staff`;
   }
   if (workplaceId != null) {
     const [wp] = await db
@@ -44,7 +48,6 @@ async function validateCrossRefs(
   return null;
 }
 
-/** Check approved leave conflicts for an employee on given date range */
 async function checkLeaveConflict(
   companyId: number,
   employeeId: number,
@@ -109,7 +112,6 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
   const startTime = new Date(parsed.data.startTime);
   const endTime = new Date(parsed.data.endTime);
 
-  // Check approved leave conflict — block if approved, warn if pending
   if (parsed.data.employeeId) {
     const conflict = await checkLeaveConflict(companyId, parsed.data.employeeId, startTime, endTime);
     if (conflict.hasConflict) {
@@ -121,7 +123,6 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
       return;
     }
     if (conflict.hasPending) {
-      // Allow creation but include warning in response header
       res.setHeader("X-Leave-Warning", `pending:${conflict.leaveType}`);
     }
   }
@@ -134,7 +135,7 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
   res.status(201).json(shift);
 });
 
-// GET /api/shifts/leave-check — check leave conflicts for a given employee + date
+// GET /api/shifts/leave-check
 router.get("/leave-check", requireRole("admin", "manager"), async (req, res) => {
   const { companyId } = req.auth!;
   if (!companyId) {
@@ -151,6 +152,274 @@ router.get("/leave-check", requireRole("admin", "manager"), async (req, res) => 
   const endTime = new Date(`${date}T23:59:59`);
   const conflict = await checkLeaveConflict(companyId, employeeId, startTime, endTime);
   res.json(conflict);
+});
+
+// POST /api/shifts/suggest — generate suggested shifts for next week
+router.post("/suggest", requireRole("admin", "manager"), async (req, res) => {
+  const { companyId } = req.auth!;
+  if (!companyId) {
+    res.status(400).json({ error: "No company associated with this account" });
+    return;
+  }
+
+  const parsed = z.object({
+    weekStart: z.string().min(1), // "YYYY-MM-DD" monday of target week
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "weekStart required" });
+    return;
+  }
+
+  const targetWeekStart = new Date(parsed.data.weekStart);
+  // Last week
+  const lastWeekStart = new Date(targetWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const lastWeekEnd = new Date(targetWeekStart);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+
+  // Get last week's published shifts
+  const lastWeekShifts = await db
+    .select()
+    .from(shifts)
+    .where(
+      and(
+        eq(shifts.companyId, companyId),
+        eq(shifts.status, "published"),
+        gte(shifts.startTime, lastWeekStart),
+        lte(shifts.startTime, lastWeekEnd),
+      ),
+    );
+
+  // Get all active employees
+  const employees = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.companyId, companyId), eq(users.status, "active")));
+  // Admins are company owners, not scheduled staff — never auto-suggest shifts for them.
+  const activeEmployees = employees.filter(e => e.role !== "platform_admin" && e.role !== "admin");
+
+  // Get availability for the target week
+  const targetWeekStartStr = parsed.data.weekStart;
+  const allAvailability = await db
+    .select()
+    .from(availability)
+    .where(and(eq(availability.companyId, companyId), eq(availability.weekStart, targetWeekStartStr)));
+
+  // Build availability map: employeeId -> { dateStr -> slotValue }
+  const availMap = new Map<number, Record<string, any>>();
+  for (const av of allAvailability) {
+    availMap.set(av.employeeId, (av.slots as Record<string, any>) ?? {});
+  }
+
+  // Get already-existing shifts for the target week (skip those days)
+  const targetWeekEnd = new Date(targetWeekStart);
+  targetWeekEnd.setDate(targetWeekEnd.getDate() + 6);
+  const existingShifts = await db
+    .select()
+    .from(shifts)
+    .where(
+      and(
+        eq(shifts.companyId, companyId),
+        gte(shifts.startTime, targetWeekStart),
+        lte(shifts.startTime, targetWeekEnd),
+      ),
+    );
+  const existingKeys = new Set(existingShifts.map(s => `${s.employeeId}:${s.startTime.toISOString().split("T")[0]}`));
+
+  // Build suggestions based on last week's pattern
+  // Greedy: for each last-week shift, try to assign the same employee this week.
+  // Count shifts per employee so we fill least-covered first.
+  const shiftCountPerEmp = new Map<number, number>();
+  for (const emp of activeEmployees) shiftCountPerEmp.set(emp.id, 0);
+
+  const suggestions: Array<{
+    employeeId: number;
+    workplaceId: number | null;
+    startTime: Date;
+    endTime: Date;
+    role: string | null;
+    notes: string | null;
+    isSuggested: boolean;
+    suggestedData: object;
+  }> = [];
+
+  // Sort last week shifts by day so we process them in order
+  const sortedLastWeek = [...lastWeekShifts].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+  for (const lastShift of sortedLastWeek) {
+    if (!lastShift.employeeId) continue;
+
+    // Map to same day-of-week in target week
+    const lastDay = lastShift.startTime.getDay(); // 0=Sun ... 6=Sat
+    const targetDate = new Date(targetWeekStart);
+    // targetWeekStart is Monday (day 1). lastDay from Monday=1..Sunday=0
+    const daysFromMonday = lastDay === 0 ? 6 : lastDay - 1;
+    targetDate.setDate(targetWeekStart.getDate() + daysFromMonday);
+    const targetDateStr = targetDate.toISOString().split("T")[0];
+
+    // Skip if shift already exists for this employee on this day
+    if (existingKeys.has(`${lastShift.employeeId}:${targetDateStr}`)) continue;
+
+    // Check availability: employee must be available (not unavailable)
+    const empSlots = availMap.get(lastShift.employeeId) ?? {};
+    const slotVal = empSlots[targetDateStr];
+    const isUnavailable =
+      slotVal === false ||
+      (typeof slotVal === "object" && slotVal !== null && slotVal.unavailable === true);
+    if (isUnavailable) {
+      // Try to find a replacement: pick available employee with fewest shifts
+      const sortedByCount = activeEmployees
+        .filter(e => {
+          if (e.id === lastShift.employeeId) return false;
+          const key = `${e.id}:${targetDateStr}`;
+          if (existingKeys.has(key)) return false;
+          const eSlots = availMap.get(e.id) ?? {};
+          const eSlot = eSlots[targetDateStr];
+          if (eSlot === false || (typeof eSlot === "object" && eSlot !== null && eSlot.unavailable === true)) return false;
+          return true;
+        })
+        .sort((a, b) => (shiftCountPerEmp.get(a.id) ?? 0) - (shiftCountPerEmp.get(b.id) ?? 0));
+
+      if (sortedByCount.length === 0) continue;
+      const replacement = sortedByCount[0]!;
+
+      const lastStart = lastShift.startTime;
+      const lastEnd = lastShift.endTime;
+      const targetStart = new Date(targetDate);
+      targetStart.setHours(lastStart.getHours(), lastStart.getMinutes(), 0, 0);
+      const targetEnd = new Date(targetDate);
+      targetEnd.setHours(lastEnd.getHours(), lastEnd.getMinutes(), 0, 0);
+
+      suggestions.push({
+        employeeId: replacement.id,
+        workplaceId: lastShift.workplaceId ?? null,
+        startTime: targetStart,
+        endTime: targetEnd,
+        role: lastShift.role ?? null,
+        notes: lastShift.notes ?? null,
+        isSuggested: true,
+        suggestedData: { basedOnShiftId: lastShift.id, originalEmployee: lastShift.employeeId, replacedUnavailable: true },
+      });
+      existingKeys.add(`${replacement.id}:${targetDateStr}`);
+      shiftCountPerEmp.set(replacement.id, (shiftCountPerEmp.get(replacement.id) ?? 0) + 1);
+      continue;
+    }
+
+    const lastStart = lastShift.startTime;
+    const lastEnd = lastShift.endTime;
+    const targetStart = new Date(targetDate);
+    targetStart.setHours(lastStart.getHours(), lastStart.getMinutes(), 0, 0);
+    const targetEnd = new Date(targetDate);
+    targetEnd.setHours(lastEnd.getHours(), lastEnd.getMinutes(), 0, 0);
+
+    suggestions.push({
+      employeeId: lastShift.employeeId,
+      workplaceId: lastShift.workplaceId ?? null,
+      startTime: targetStart,
+      endTime: targetEnd,
+      role: lastShift.role ?? null,
+      notes: lastShift.notes ?? null,
+      isSuggested: true,
+      suggestedData: { basedOnShiftId: lastShift.id },
+    });
+    existingKeys.add(`${lastShift.employeeId}:${targetDateStr}`);
+    shiftCountPerEmp.set(lastShift.employeeId, (shiftCountPerEmp.get(lastShift.employeeId) ?? 0) + 1);
+  }
+
+  if (suggestions.length === 0) {
+    res.json({ inserted: 0, suggestions: [] });
+    return;
+  }
+
+  // Insert all suggestions as draft shifts
+  const { userId } = req.auth!;
+  const inserted = await db
+    .insert(shifts)
+    .values(suggestions.map(s => ({ ...s, companyId, createdBy: userId, status: "draft" as const })))
+    .returning();
+
+  res.status(201).json({ inserted: inserted.length, suggestions: inserted });
+});
+
+// POST /api/shifts/approve-suggestions — approve all suggested drafts for a week.
+// By default publishes them; pass { publish: false } to just move them into
+// the regular draft pool (clears the "suggested" flag but keeps status: draft).
+router.post("/approve-suggestions", requireRole("admin", "manager"), async (req, res) => {
+  const { companyId } = req.auth!;
+  if (!companyId) {
+    res.status(400).json({ error: "No company" });
+    return;
+  }
+  const parsed = z.object({ weekStart: z.string().min(1), publish: z.boolean().optional() }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "weekStart required" });
+    return;
+  }
+
+  const publish = parsed.data.publish !== false;
+  const targetWeekStart = new Date(parsed.data.weekStart);
+  const targetWeekEnd = new Date(targetWeekStart);
+  targetWeekEnd.setDate(targetWeekEnd.getDate() + 6);
+
+  const updated = await db
+    .update(shifts)
+    .set(publish ? { isSuggested: false, status: "published" } : { isSuggested: false })
+    .where(
+      and(
+        eq(shifts.companyId, companyId),
+        eq(shifts.isSuggested, true),
+        eq(shifts.status, "draft"),
+        gte(shifts.startTime, targetWeekStart),
+        lte(shifts.startTime, targetWeekEnd),
+      ),
+    )
+    .returning({ id: shifts.id });
+
+  res.json({ approved: updated.length, published: publish });
+});
+
+// POST /api/shifts/:id/claim — an employee claims an unassigned open shift directly.
+router.post("/:id/claim", async (req, res) => {
+  const id = parseId(req.params["id"], res);
+  if (id === null) return;
+  const { companyId, userId } = req.auth!;
+  if (!companyId) { res.status(400).json({ error: "No company" }); return; }
+
+  const [shift] = await db
+    .select()
+    .from(shifts)
+    .where(and(eq(shifts.id, id), eq(shifts.companyId, companyId)))
+    .limit(1);
+  if (!shift) { res.status(404).json({ error: "Shift not found" }); return; }
+  if (shift.employeeId) { res.status(400).json({ error: "This shift is already assigned" }); return; }
+  if (shift.status !== "published") { res.status(400).json({ error: "This shift is not open" }); return; }
+
+  const [updated] = await db
+    .update(shifts)
+    .set({ employeeId: userId })
+    .where(and(eq(shifts.id, id), eq(shifts.companyId, companyId)))
+    .returning();
+
+  const [claimer] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  const shiftStart = new Date(shift.startTime).toLocaleString();
+
+  const managers = await db
+    .select({ id: users.id, role: users.role })
+    .from(users)
+    .where(and(eq(users.companyId, companyId), eq(users.status, "active")));
+  const mgNotifs = managers
+    .filter(m => (m.role === "admin" || m.role === "manager") && m.id !== userId)
+    .map(m => ({
+      companyId: companyId!,
+      userId: m.id,
+      type: "shift_taken",
+      title: "Open Shift Claimed",
+      message: `${claimer?.name ?? "An employee"} claimed the open shift on ${shiftStart}.`,
+      data: { shiftId: id, claimedBy: userId },
+    }));
+  if (mgNotifs.length > 0) await db.insert(notifications).values(mgNotifs);
+
+  res.json(updated);
 });
 
 // GET /api/shifts/:id

@@ -26,6 +26,8 @@ export interface PlatformCompany {
   status: string;
   plan: string;
   createdAt: string;
+  customDomain?: string | null;
+  domainStatus?: string;
 }
 
 export interface CreateCompanyResult {
@@ -64,6 +66,181 @@ export function usePlatformCreateCompany() {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+  });
+}
+
+export interface PlatformCompanyUser {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface PlatformCompanyDetail extends PlatformCompany {
+  address?: string | null;
+  phone?: string | null;
+  timezone?: string;
+  weekStartDay?: number;
+  overtimeThreshold?: string;
+  domainVerifiedAt?: string | null;
+  users: PlatformCompanyUser[];
+}
+
+export function usePlatformCompany(id: number | null) {
+  return useQuery({
+    queryKey: ['platform', 'companies', id],
+    queryFn: () => fetchPlatform<PlatformCompanyDetail>(`/api/platform/companies/${id}`),
+    enabled: id !== null,
+  });
+}
+
+export function usePlatformImpersonate() {
+  return useMutation({
+    mutationFn: (userId: number) =>
+      fetchPlatform<{ token: string; userId: number; role: string; companyId: number | null }>(
+        `/api/platform/impersonate/${userId}`,
+        { method: 'POST' },
+      ),
+  });
+}
+
+export interface UpdateCompanyPayload {
+  name?: string;
+  status?: string;
+  plan?: string;
+  timezone?: string;
+  address?: string | null;
+  phone?: string | null;
+  overtimeThreshold?: string;
+  weekStartDay?: number;
+  customDomain?: string | null;
+}
+
+export function usePlatformUpdateCompany() {
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateCompanyPayload }) =>
+      fetchPlatform<PlatformCompanyDetail>(`/api/platform/companies/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+  });
+}
+
+export interface DomainVerifyResult {
+  id: number;
+  customDomain: string | null;
+  domainStatus: string;
+  domainVerifiedAt: string | null;
+  checkDetail: string;
+  method: string;
+}
+
+export function usePlatformVerifyDomain() {
+  return useMutation({
+    mutationFn: (companyId: number) =>
+      fetchPlatform<DomainVerifyResult>(`/api/platform/companies/${companyId}/domain/verify`, { method: 'POST' }),
+  });
+}
+
+export interface DomainDnsInstructions {
+  customDomain: string | null;
+  domainStatus: string;
+  recordType: string;
+  target: string | null;
+  allTargets: string[];
+}
+
+export function usePlatformDomainInstructions(companyId: number | null) {
+  return useQuery({
+    queryKey: ['platform', 'companies', companyId, 'domain-instructions'],
+    queryFn: () => fetchPlatform<DomainDnsInstructions>(`/api/platform/companies/${companyId}/domain/dns-instructions`),
+    enabled: companyId !== null,
+  });
+}
+
+export function usePlatformAddAdmin() {
+  return useMutation({
+    mutationFn: ({ companyId, data }: { companyId: number; data: { name: string; email: string; tempPassword: string } }) =>
+      fetchPlatform<{ id: number; email: string; name: string; role: string; mustChangePassword: boolean }>(
+        `/api/platform/companies/${companyId}/admins`,
+        { method: 'POST', body: JSON.stringify(data) },
+      ),
+  });
+}
+
+// ─── Platform-admin accounts ───────────────────────────────────────────────
+
+export interface PlatformAdminUser {
+  id: number;
+  email: string;
+  name: string;
+  status: string;
+  createdAt: string;
+}
+
+export function usePlatformAdmins() {
+  return useQuery({
+    queryKey: ['platform', 'admins'],
+    queryFn: () => fetchPlatform<PlatformAdminUser[]>('/api/platform/admins'),
+  });
+}
+
+export function usePlatformAddPlatformAdmin() {
+  return useMutation({
+    mutationFn: (data: { name: string; email: string; tempPassword: string }) =>
+      fetchPlatform<{ id: number; email: string; name: string; role: string; mustChangePassword: boolean }>(
+        `/api/platform/admins`,
+        { method: 'POST', body: JSON.stringify(data) },
+      ),
+  });
+}
+
+// ─── Platform-wide settings (site contact form SMTP) ───────────────────────
+
+export interface PlatformSmtpSanitized {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  from: string;
+  configured: true;
+}
+
+export interface PlatformSettings {
+  smtp: PlatformSmtpSanitized | null;
+  contactEmailTo: string | null;
+  contactEmailFrom: string | null;
+}
+
+export function usePlatformSettings() {
+  return useQuery({
+    queryKey: ['platform', 'settings'],
+    queryFn: () => fetchPlatform<PlatformSettings>('/api/platform/settings'),
+  });
+}
+
+export interface SavePlatformSmtpPayload {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+}
+
+export function usePlatformSaveSettings() {
+  return useMutation({
+    mutationFn: (data: { smtp?: SavePlatformSmtpPayload | null; contactEmailTo?: string | null; contactEmailFrom?: string | null }) =>
+      fetchPlatform<PlatformSettings>('/api/platform/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  });
+}
+
+export function usePlatformTestSmtp() {
+  return useMutation({
+    mutationFn: (data: SavePlatformSmtpPayload) =>
+      fetchPlatform<{ success: boolean; message: string }>('/api/platform/settings/test-smtp', { method: 'POST', body: JSON.stringify(data) }),
   });
 }
 

@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useListUsers, useUpdateUser, useDeleteUser , getListUsersQueryKey} from "@workspace/api-client-react";
+import { useListUsers, useUpdateUser, useDeleteUser, useGetCompany, getListUsersQueryKey, getGetCompanyQueryKey } from "@workspace/api-client-react";
+import { formatHourlyRate } from "@/lib/currency";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ export default function TeamPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: users = [], isLoading } = useListUsers({ query: { enabled: !!user , queryKey: getListUsersQueryKey() } });
+  const { data: company } = useGetCompany(user?.companyId || 0, { query: { enabled: !!user?.companyId, queryKey: getGetCompanyQueryKey(user?.companyId || 0) } });
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
 
@@ -90,7 +92,7 @@ export default function TeamPage() {
                       <TableRow key={member.id} className="hover:bg-muted/30">
                         <TableCell>
                           <div className="font-semibold">{member.name}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">{member.hourlyRate ? `$${member.hourlyRate}/hr` : 'Salary'}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{member.hourlyRate ? `${formatHourlyRate(member.hourlyRate, (company as any)?.currency)}` : 'Salary'}</div>
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">{member.email}</div>

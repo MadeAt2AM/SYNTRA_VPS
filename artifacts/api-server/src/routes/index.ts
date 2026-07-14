@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import authRouter from "./auth";
+import publicRouter from "./public";
 import platformRouter from "./platform";
 import usersRouter from "./users";
 import companiesRouter from "./companies";
@@ -11,13 +12,20 @@ import leaveRequestsRouter from "./leave-requests";
 import timeLogsRouter from "./time-logs";
 import invitationsRouter from "./invitations";
 import shiftPresetsRouter from "./shift-presets";
+import shiftSwapsRouter from "./shift-swaps";
+import shiftOffersRouter from "./shift-offers";
+import shiftReplacementsRouter from "./shift-replacements";
+import notificationsRouter from "./notifications";
 import { z } from "zod";
 import { sendEmail } from "../lib/email";
+import { db, platformSettings } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use("/auth", authRouter);
+router.use("/public", publicRouter);
 router.use("/platform", platformRouter);
 router.use("/users", usersRouter);
 router.use("/companies", companiesRouter);
@@ -28,6 +36,10 @@ router.use("/leave-requests", leaveRequestsRouter);
 router.use("/time-logs", timeLogsRouter);
 router.use("/invitations", invitationsRouter);
 router.use("/shift-presets", shiftPresetsRouter);
+router.use("/shift-swaps", shiftSwapsRouter);
+router.use("/shift-offers", shiftOffersRouter);
+router.use("/shift-replacements", shiftReplacementsRouter);
+router.use("/notifications", notificationsRouter);
 
 // Public contact/enquiry endpoint
 const contactSchema = z.object({
@@ -38,7 +50,6 @@ const contactSchema = z.object({
   message: z.string().min(1),
 });
 
-/** Escape user-supplied strings so they are safe inside HTML email bodies. */
 function escHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -62,14 +73,20 @@ router.post("/contact", async (req, res) => {
   const safeCompany = company ? escHtml(company) : null;
   const safeMessage = escHtml(message).replace(/\n/g, "<br>");
 
-  // Send email via env-configured SMTP
   try {
-    const smtpHost = process.env["CONTACT_SMTP_HOST"];
-    const smtpPort = parseInt(process.env["CONTACT_SMTP_PORT"] ?? "587", 10);
-    const smtpUser = process.env["CONTACT_SMTP_USER"];
-    const smtpPass = process.env["CONTACT_SMTP_PASS"];
-    const emailTo = process.env["CONTACT_EMAIL_TO"] ?? "chris@madeat2am.in";
-    const emailFrom = process.env["CONTACT_EMAIL_FROM"] ?? `SYNTRA Enquiries <${smtpUser}>`;
+    // Platform-admin-configured SMTP (set via the platform console) takes
+    // priority; env vars remain a fallback for environments where the
+    // platform admin hasn't configured it yet in-app.
+    const [settings] = await db.select().from(platformSettings).where(eq(platformSettings.id, 1)).limit(1);
+    const cfg = settings?.smtpConfig as { host?: string; port?: number; secure?: boolean; user?: string; pass?: string; from?: string } | null;
+
+    const smtpHost = cfg?.host || process.env["CONTACT_SMTP_HOST"];
+    const smtpPort = cfg?.port ?? parseInt(process.env["CONTACT_SMTP_PORT"] ?? "587", 10);
+    const smtpSecure = cfg?.secure ?? false;
+    const smtpUser = cfg?.user || process.env["CONTACT_SMTP_USER"];
+    const smtpPass = cfg?.pass || process.env["CONTACT_SMTP_PASS"];
+    const emailTo = settings?.contactEmailTo || process.env["CONTACT_EMAIL_TO"] || "chris@madeat2am.in";
+    const emailFrom = settings?.contactEmailFrom || cfg?.from || process.env["CONTACT_EMAIL_FROM"] || `SYNTRA Enquiries <${smtpUser}>`;
 
     if (smtpHost && smtpUser && smtpPass) {
       const html = `
@@ -98,15 +115,14 @@ router.post("/contact", async (req, res) => {
 </html>`;
 
       await sendEmail(
-        { host: smtpHost, port: smtpPort, secure: false, user: smtpUser, pass: smtpPass, from: emailFrom },
+        { host: smtpHost, port: smtpPort, secure: smtpSecure, user: smtpUser, pass: smtpPass, from: emailFrom },
         emailTo,
         `New SYNTRA Enquiry from ${safeName}${safeCompany ? ` (${safeCompany})` : ""}`,
         html,
       );
     }
   } catch (err) {
-    // Log but don't fail the response — enquiry is still recorded
-    console.error("[Contact form] Email send failed:", err);
+    req.log?.warn({ err }, "[Contact form] Email send failed");
   }
 
   res.json({ success: true, message: "Thank you for your enquiry. We will be in touch shortly." });

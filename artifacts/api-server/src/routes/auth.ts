@@ -6,6 +6,7 @@ import { users, invitations, companies } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, signToken } from "../middlewares/auth";
 import { sendEmail, SmtpConfig } from "../lib/email";
+import { renderBrandedEmail } from "../lib/email-templates";
 import { z } from "zod";
 
 const router = Router();
@@ -310,26 +311,30 @@ router.post("/forgot-password", async (req, res) => {
     // Attempt to send email using the company's SMTP config
     if (user.companyId) {
       const [company] = await db
-        .select({ smtpConfig: companies.smtpConfig })
+        .select({ name: companies.name, smtpConfig: companies.smtpConfig, logoUrl: companies.logoUrl, logoText: companies.logoText })
         .from(companies)
         .where(eq(companies.id, user.companyId))
         .limit(1);
 
       const smtp = company?.smtpConfig as SmtpConfig | null;
-      if (smtp?.host) {
+      if (smtp?.host && company) {
         const origin = getAppBaseUrl();
         const resetUrl = `${origin}/reset-password?token=${rawToken}`;
 
-        const html = `
-          <p>Hi ${user.name},</p>
-          <p>You requested a password reset for your SYNTRA account.</p>
-          <p><a href="${resetUrl}" style="background:#e11d48;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;">Reset Password</a></p>
-          <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
-          <p>— SYNTRA Workforce Management</p>
-        `;
+        const html = renderBrandedEmail(
+          { name: company.name, logoUrl: company.logoUrl, logoText: company.logoText },
+          `
+          <p style="color:#444;font-size:15px;line-height:1.6;margin:0 0 16px;">Hi ${user.name},</p>
+          <p style="color:#444;font-size:15px;line-height:1.6;margin:0 0 24px;">You requested a password reset for your <strong>${company.name}</strong> account.</p>
+          <div style="text-align:center;margin:0 0 24px;">
+            <a href="${resetUrl}" style="background:#e11d48;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Reset Password</a>
+          </div>
+          <p style="color:#888;font-size:13px;line-height:1.6;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+          `,
+        );
 
         try {
-          await sendEmail(smtp, user.email, "Reset your SYNTRA password", html);
+          await sendEmail(smtp, user.email, `Reset your ${company.name} password`, html);
         } catch (err) {
           req.log?.warn({ err }, "Failed to send password reset email");
         }

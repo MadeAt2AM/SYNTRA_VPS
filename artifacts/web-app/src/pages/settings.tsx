@@ -4,15 +4,54 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Building, User, Mail, KeyRound, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Building, User, Mail, KeyRound, ChevronDown, ChevronUp, ExternalLink, ImageIcon, DollarSign } from "lucide-react";
 import { apiSaveSmtp, apiTestSmtp, apiChangePassword } from "@/lib/platform-api";
 import { Switch } from "@/components/ui/switch";
+
+const TIMEZONES = [
+  "UTC",
+  "Pacific/Honolulu", "America/Los_Angeles", "America/Denver", "America/Chicago",
+  "America/New_York", "America/Sao_Paulo",
+  "Europe/London", "Europe/Dublin", "Europe/Lisbon",
+  "Europe/Paris", "Europe/Berlin", "Europe/Amsterdam", "Europe/Madrid", "Europe/Rome",
+  "Europe/Stockholm", "Europe/Warsaw", "Europe/Vienna",
+  "Europe/Istanbul", "Europe/Moscow",
+  "Africa/Cairo", "Africa/Lagos", "Africa/Nairobi", "Africa/Johannesburg",
+  "Asia/Riyadh", "Asia/Dubai", "Asia/Karachi", "Asia/Kolkata",
+  "Asia/Colombo", "Asia/Dhaka", "Asia/Bangkok", "Asia/Kuala_Lumpur",
+  "Asia/Singapore", "Asia/Manila", "Asia/Shanghai", "Asia/Hong_Kong",
+  "Asia/Seoul", "Asia/Tokyo",
+  "Australia/Perth", "Australia/Darwin", "Australia/Adelaide",
+  "Australia/Sydney", "Australia/Melbourne", "Australia/Brisbane",
+  "Pacific/Auckland",
+];
+
+const CURRENCIES = [
+  { value: "USD", label: "USD — US Dollar ($)" },
+  { value: "GBP", label: "GBP — British Pound (£)" },
+  { value: "EUR", label: "EUR — Euro (€)" },
+  { value: "AUD", label: "AUD — Australian Dollar (A$)" },
+  { value: "CAD", label: "CAD — Canadian Dollar (C$)" },
+  { value: "NZD", label: "NZD — New Zealand Dollar (NZ$)" },
+  { value: "SGD", label: "SGD — Singapore Dollar (S$)" },
+  { value: "AED", label: "AED — UAE Dirham (د.إ)" },
+  { value: "INR", label: "INR — Indian Rupee (₹)" },
+  { value: "MYR", label: "MYR — Malaysian Ringgit (RM)" },
+  { value: "PHP", label: "PHP — Philippine Peso (₱)" },
+  { value: "PKR", label: "PKR — Pakistani Rupee (₨)" },
+  { value: "LKR", label: "LKR — Sri Lankan Rupee (Rs)" },
+  { value: "ZAR", label: "ZAR — South African Rand (R)" },
+  { value: "BDT", label: "BDT — Bangladeshi Taka (৳)" },
+  { value: "THB", label: "THB — Thai Baht (฿)" },
+  { value: "IDR", label: "IDR — Indonesian Rupiah (Rp)" },
+];
 
 const profileSchema = z.object({
   name: z.string().min(2, "Name required"),
@@ -20,10 +59,13 @@ const profileSchema = z.object({
 });
 
 const companySchema = z.object({
-  name: z.string().min(2, "Name required"),
+  name: z.string().min(2, "Company name required"),
   address: z.string().optional().nullable(),
   timezone: z.string().min(1, "Timezone required"),
+  currency: z.string().min(1, "Currency required"),
   overtimeThreshold: z.string().min(1, "Threshold required"),
+  logoUrl: z.string().optional().nullable(),
+  logoText: z.string().max(40).optional().nullable(),
 });
 
 const smtpSchema = z.object({
@@ -64,7 +106,7 @@ export default function SettingsPage() {
 
   const companyForm = useForm<z.infer<typeof companySchema>>({
     resolver: zodResolver(companySchema),
-    defaultValues: { name: "", address: "", timezone: "UTC", overtimeThreshold: "40" },
+    defaultValues: { name: "", address: "", timezone: "UTC", currency: "USD", overtimeThreshold: "40", logoUrl: "", logoText: "" },
   });
 
   const smtpForm = useForm<z.infer<typeof smtpSchema>>({
@@ -83,8 +125,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (company) {
-      companyForm.reset({ name: company.name, address: company.address, timezone: company.timezone, overtimeThreshold: company.overtimeThreshold });
-      const smtp = (company as any).smtpConfig;
+      const c = company as any;
+      companyForm.reset({
+        name: c.name,
+        address: c.address ?? "",
+        timezone: c.timezone ?? "UTC",
+        currency: c.currency ?? "USD",
+        overtimeThreshold: c.overtimeThreshold ?? "40",
+        logoUrl: c.logoUrl ?? "",
+        logoText: c.logoText ?? "",
+      });
+      const smtp = c.smtpConfig;
       if (smtp) smtpForm.reset({ host: smtp.host || "", port: smtp.port || 587, secure: smtp.secure || false, user: smtp.user || "", pass: smtp.pass || "", from: smtp.from || "" });
     }
   }, [company]);
@@ -101,10 +152,15 @@ export default function SettingsPage() {
 
   function onCompanySubmit(values: z.infer<typeof companySchema>) {
     if (!company) return;
-    updateCompany.mutate({ id: company.id, data: values }, {
+    const payload: any = { ...values };
+    // Coerce empty strings to null
+    if (!payload.logoUrl) payload.logoUrl = null;
+    if (!payload.logoText) payload.logoText = null;
+    if (!payload.address) payload.address = null;
+    updateCompany.mutate({ id: (company as any).id, data: payload }, {
       onSuccess: () => {
         toast({ title: "Company settings saved" });
-        queryClient.invalidateQueries({ queryKey: ['/api/companies', company.id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/companies', (company as any).id] });
       }
     });
   }
@@ -222,7 +278,8 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <Form {...companyForm}>
-              <form onSubmit={companyForm.handleSubmit(onCompanySubmit)} className="space-y-4">
+              <form onSubmit={companyForm.handleSubmit(onCompanySubmit)} className="space-y-5">
+                {/* Basic */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField control={companyForm.control} name="name" render={({ field }) => (
                     <FormItem><FormLabel>Company Name</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
@@ -230,15 +287,95 @@ export default function SettingsPage() {
                   <FormField control={companyForm.control} name="address" render={({ field }) => (
                     <FormItem><FormLabel>Address</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
                   )} />
+                </div>
+
+                {/* Timezone + Currency */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField control={companyForm.control} name="timezone" render={({ field }) => (
-                    <FormItem><FormLabel>Timezone</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                    <FormItem>
+                      <FormLabel>Timezone</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "UTC"}>
+                        <FormControl>
+                          <SelectTrigger><SelectValue placeholder="Select timezone" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-64">
+                          {TIMEZONES.map(tz => (
+                            <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
                   )} />
-                  <FormField control={companyForm.control} name="overtimeThreshold" render={({ field }) => (
-                    <FormItem><FormLabel>Overtime Threshold (hrs/week)</FormLabel><FormControl><Input {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>
+                  <FormField control={companyForm.control} name="currency" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel><span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />Currency</span></FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "USD"}>
+                        <FormControl>
+                          <SelectTrigger><SelectValue placeholder="Select currency" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-64">
+                          {CURRENCIES.map(c => (
+                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
                   )} />
                 </div>
+
+                {/* Overtime */}
+                <FormField control={companyForm.control} name="overtimeThreshold" render={({ field }) => (
+                  <FormItem className="sm:max-w-xs">
+                    <FormLabel>Overtime Threshold (hours/week)</FormLabel>
+                    <FormControl><Input type="number" min="0" {...field} value={field.value || ""} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                {/* Branding */}
+                <div className="border border-border/40 rounded-lg p-4 space-y-4 bg-muted/20">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <ImageIcon className="w-4 h-4 text-primary" />
+                    <span>Branding</span>
+                    <span className="text-xs text-muted-foreground font-normal">— shown in the sidebar</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField control={companyForm.control} name="logoText" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Logo Text</FormLabel>
+                        <FormControl><Input placeholder="e.g. Acme Corp" maxLength={40} {...field} value={field.value || ""} /></FormControl>
+                        <p className="text-[11px] text-muted-foreground">Short name shown in sidebar. First 2 chars shown as icon if no logo URL.</p>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={companyForm.control} name="logoUrl" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Logo URL</FormLabel>
+                        <FormControl><Input placeholder="https://example.com/logo.png" {...field} value={field.value || ""} /></FormControl>
+                        <p className="text-[11px] text-muted-foreground">Direct image URL (PNG/SVG recommended, 64×64px min).</p>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                  {/* Preview */}
+                  {(companyForm.watch("logoText") || companyForm.watch("logoUrl")) && (
+                    <div className="flex items-center gap-2 p-2 rounded-md bg-sidebar text-sidebar-foreground w-fit">
+                      {companyForm.watch("logoUrl") ? (
+                        <img src={companyForm.watch("logoUrl")!} alt="preview" className="w-7 h-7 rounded object-contain bg-white" />
+                      ) : (
+                        <div className="w-7 h-7 bg-sidebar-primary rounded flex items-center justify-center text-sidebar-primary-foreground font-bold text-xs">
+                          {(companyForm.watch("logoText") || "??").slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-sm font-semibold">{companyForm.watch("logoText") || "Preview"}</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-end">
-                  <Button type="submit" size="sm" disabled={updateCompany.isPending}>{updateCompany.isPending ? "Saving..." : "Save Company"}</Button>
+                  <Button type="submit" size="sm" disabled={updateCompany.isPending}>{updateCompany.isPending ? "Saving..." : "Save Company Settings"}</Button>
                 </div>
               </form>
             </Form>
@@ -332,7 +469,7 @@ export default function SettingsPage() {
                   <FormItem>
                     <FormLabel>From Address</FormLabel>
                     <FormControl><Input placeholder='SYNTRA <noreply@yourcompany.com>' {...field} /></FormControl>
-                    <p className="text-[11px] text-muted-foreground mt-1">Can be a different domain than your username — e.g. username is <code>support@host.com</code>, from is <code>noreply@company.com</code></p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Can be a different domain than your username.</p>
                     <FormMessage />
                   </FormItem>
                 )} />

@@ -16,9 +16,11 @@ import { Mail, Plus, Trash2, Copy, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
+// Admins cannot be invited from this screen — only a platform administrator
+// can grant the admin role to a company, via the platform console.
 const invitationSchema = z.object({
   email: z.string().email("Invalid email"),
-  role: z.enum(['admin', 'manager', 'employee']),
+  role: z.enum(['manager', 'employee']),
 });
 
 export default function InvitationsPage() {
@@ -125,8 +127,7 @@ export default function InvitationsPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
+                          {user?.role === 'admin' && <SelectItem value="manager">Manager</SelectItem>}
                           <SelectItem value="employee">Employee</SelectItem>
                         </SelectContent>
                       </Select>

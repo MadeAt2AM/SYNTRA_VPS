@@ -81,17 +81,33 @@ export interface UpdateUserRequest {
   avatarUrl?: string | null;
 }
 
+export type CompanyDomainStatus = typeof CompanyDomainStatus[keyof typeof CompanyDomainStatus];
+
+
+export const CompanyDomainStatus = {
+  none: 'none',
+  pending: 'pending',
+  verified: 'verified',
+  failed: 'failed',
+} as const;
+
 export interface Company {
   id: number;
   name: string;
   status: string;
   plan: string;
   logoUrl?: string | null;
+  logoText?: string | null;
+  currency: string;
   address?: string | null;
   phone?: string | null;
   timezone: string;
   weekStartDay: number;
   overtimeThreshold: string;
+  /** Custom domain the company has pointed at the platform (platform-admin managed). */
+  customDomain?: string | null;
+  domainStatus?: CompanyDomainStatus;
+  domainVerifiedAt?: string | null;
   createdAt?: string;
 }
 
@@ -107,6 +123,8 @@ export interface UpdateCompanyRequest {
   weekStartDay?: number;
   overtimeThreshold?: string;
   logoUrl?: string | null;
+  logoText?: string | null;
+  currency?: string;
 }
 
 export interface Workplace {

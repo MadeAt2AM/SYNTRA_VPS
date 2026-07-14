@@ -1,9 +1,14 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useListUsers, useListLeaveRequests, useListTimeLogs, useListShifts, getListUsersQueryKey, getListLeaveRequestsQueryKey, getListTimeLogsQueryKey, getListShiftsQueryKey } from "@workspace/api-client-react";
+import { useListUsers, useListLeaveRequests, useListTimeLogs, useListShifts, useGetCompany, getListUsersQueryKey, getListLeaveRequestsQueryKey, getListTimeLogsQueryKey, getListShiftsQueryKey, getGetCompanyQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { format, isToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
-import { Users, Clock, CalendarDays, AlertCircle, TrendingUp, DollarSign, Timer, BarChart3 } from "lucide-react";
-import { useMemo } from "react";
+import { Users, Clock, CalendarDays, AlertCircle, TrendingUp, DollarSign, Timer, BarChart3, ArrowLeftRight } from "lucide-react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { formatMoney } from "@/lib/currency";
+import { listShiftSwaps, respondToSwap, type ShiftSwap } from "@/lib/notifications-api";
 
 function computeStats(timeLogs: any[], userMap: Map<number, any>, from: Date, to: Date) {
   let totalHours = 0;
@@ -27,11 +32,14 @@ function computeStats(timeLogs: any[], userMap: Map<number, any>, from: Date, to
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data: users = [] } = useListUsers({ query: { enabled: !!user && user.role !== 'employee', queryKey: getListUsersQueryKey() } });
   const { data: leaveRequests = [] } = useListLeaveRequests({ query: { enabled: !!user, queryKey: getListLeaveRequestsQueryKey() } });
   const { data: timeLogs = [] } = useListTimeLogs({ query: { enabled: !!user, queryKey: getListTimeLogsQueryKey() } });
   const { data: shifts = [] } = useListShifts({ query: { enabled: !!user, queryKey: getListShiftsQueryKey() } });
+  const { data: company } = useGetCompany(user?.companyId || 0, { query: { enabled: !!user?.companyId, queryKey: getGetCompanyQueryKey(user?.companyId || 0) } });
 
   const role = user?.role;
   const isOwner = role === "admin";
@@ -52,7 +60,38 @@ export default function DashboardPage() {
   const monthStats = useMemo(() => computeStats(timeLogs, userMap, monthFrom, monthTo), [timeLogs, userMap]);
 
   function formatPay(val: number) {
-    return val.toLocaleString("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return formatMoney(val, (company as any)?.currency);
+  }
+
+  // Pending shift-swap requests waiting on me, surfaced right on the dashboard
+  const [swaps, setSwaps] = useState<ShiftSwap[]>([]);
+  const [respondingSwapId, setRespondingSwapId] = useState<number | null>(null);
+  const loadSwaps = useCallback(async () => {
+    if (!user) return;
+    try { setSwaps(await listShiftSwaps()); } catch { /* ignore */ }
+  }, [user]);
+  useEffect(() => { loadSwaps(); }, [loadSwaps]);
+
+  const pendingSwapsForMe = useMemo(
+    () => swaps.filter(s => s.targetEmployeeId === user?.id && s.status === "pending"),
+    [swaps, user],
+  );
+  const shiftMap = useMemo(() => new Map(shifts.map(s => [s.id, s])), [shifts]);
+
+  async function handleRespondSwap(swapId: number, action: "accept" | "reject") {
+    setRespondingSwapId(swapId);
+    try {
+      await respondToSwap(swapId, action);
+      toast({ title: action === "accept" ? "Swap accepted" : "Swap declined" });
+      await loadSwaps();
+      qc.invalidateQueries({ queryKey: getListShiftsQueryKey() });
+    } catch (err: any) {
+      toast({ title: "Failed", description: err?.data?.error, variant: "destructive" });
+    } finally { setRespondingSwapId(null); }
+  }
+
+  function fmtShiftTime(iso: string) {
+    return format(new Date(iso), "h:mma").toLowerCase();
   }
 
   return (
@@ -186,6 +225,39 @@ export default function DashboardPage() {
               Analytics are calculated from clocked-in time logs with hourly rates set on staff profiles.
             </p>
           )}
+        </div>
+      )}
+
+      {pendingSwapsForMe.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-xl font-bold font-sans tracking-tight border-b border-border/50 pb-2 flex items-center gap-2">
+            <ArrowLeftRight className="h-5 w-5 text-primary" /> Pending Swap Requests
+          </h2>
+          <div className="space-y-3">
+            {pendingSwapsForMe.map(swap => {
+              const requester = users.find(u => u.id === swap.requesterId) ?? userMap.get(swap.requesterId);
+              const theirShift = shiftMap.get(swap.requesterShiftId);
+              const myShift = shiftMap.get(swap.targetShiftId);
+              const busy = respondingSwapId === swap.id;
+              return (
+                <div key={swap.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-card rounded-lg border border-border shadow-sm">
+                  <div>
+                    <p className="font-semibold text-sm">
+                      {requester?.name ?? "A colleague"} wants to swap shifts with you
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Their shift: {theirShift ? `${format(new Date(theirShift.startTime), "MMM d, h:mm a")}` : "—"}
+                      {"  •  "}Your shift: {myShift ? `${format(new Date(myShift.startTime), "MMM d, h:mm a")}` : "—"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => handleRespondSwap(swap.id, "reject")}>Decline</Button>
+                    <Button size="sm" disabled={busy} onClick={() => handleRespondSwap(swap.id, "accept")}>{busy ? "..." : "Accept"}</Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

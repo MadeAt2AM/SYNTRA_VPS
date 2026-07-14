@@ -5,6 +5,7 @@
  * Workforce scheduling API
  * OpenAPI spec version: 0.2.0
  */
+import type { CompanyDomainStatus } from './companyDomainStatus';
 
 export interface Company {
   id: number;
@@ -12,10 +13,16 @@ export interface Company {
   status: string;
   plan: string;
   logoUrl?: string | null;
+  logoText?: string | null;
+  currency: string;
   address?: string | null;
   phone?: string | null;
   timezone: string;
   weekStartDay: number;
   overtimeThreshold: string;
+  /** Custom domain the company has pointed at the platform (platform-admin managed). */
+  customDomain?: string | null;
+  domainStatus?: CompanyDomainStatus;
+  domainVerifiedAt?: Date | null;
   createdAt?: Date;
 }

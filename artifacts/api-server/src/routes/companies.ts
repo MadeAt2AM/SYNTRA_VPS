@@ -18,6 +18,8 @@ const updateCompanySchema = z.object({
   weekStartDay: z.number().int().min(0).max(6).optional(),
   overtimeThreshold: z.string().optional(),
   logoUrl: z.string().optional().nullable(),
+  logoText: z.string().optional().nullable(),
+  currency: z.string().min(1).max(10).optional(),
   status: z.enum(["active", "inactive"]).optional(),
   plan: z.enum(["starter", "professional", "enterprise"]).optional(),
 });
@@ -30,6 +32,19 @@ const smtpConfigSchema = z.object({
   pass: z.string().min(1),
   from: z.string().min(1),
 });
+
+// Only the admin (who is the only role allowed to configure SMTP) should ever see the
+// plaintext SMTP password back — managers/employees calling this same endpoint for
+// company profile info (currency, logo, timezone, etc.) must not receive it.
+function sanitizeCompanyForRole<T extends { smtpConfig: unknown }>(company: T, role: string | undefined) {
+  if (role === "admin") return company;
+  const cfg = company.smtpConfig as { host?: string; port?: number; secure?: boolean; user?: string; from?: string } | null;
+  const { smtpConfig, ...rest } = company;
+  return {
+    ...rest,
+    smtpConfig: cfg ? { host: cfg.host, port: cfg.port, secure: cfg.secure, user: cfg.user, from: cfg.from, configured: true } : null,
+  };
+}
 
 // GET /api/companies/:id
 router.get("/:id", async (req, res) => {
@@ -44,7 +59,7 @@ router.get("/:id", async (req, res) => {
     res.status(404).json({ error: "Company not found" });
     return;
   }
-  res.json(company);
+  res.json(sanitizeCompanyForRole(company, req.auth!.role));
 });
 
 // PUT /api/companies/:id — admin only
@@ -65,7 +80,7 @@ router.put("/:id", requireRole("admin"), async (req, res) => {
     res.status(404).json({ error: "Company not found" });
     return;
   }
-  res.json(updated);
+  res.json(sanitizeCompanyForRole(updated, req.auth!.role));
 });
 
 // PUT /api/companies/:id/smtp — save SMTP config (admin only)

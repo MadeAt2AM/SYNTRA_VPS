@@ -16,6 +16,7 @@ export * from './badRequestResponse';
 export * from './clockInRequest';
 export * from './clockOutRequest';
 export * from './company';
+export * from './companyDomainStatus';
 export * from './conflictResponse';
 export * from './errorResponse';
 export * from './forbiddenResponse';

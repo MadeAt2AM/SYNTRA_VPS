@@ -309,43 +309,45 @@ export default function TimeLogsPage() {
         )}
       </div>
 
-      {/* Clock in / out card */}
-      <Card className="border-primary shadow-lg bg-card/80 backdrop-blur border-t-4">
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-inner ${activeLog ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                <Clock size={28} />
+      {/* Clock in / out card — not shown to admin (owner account, not a scheduled employee) */}
+      {user?.role !== 'admin' && (
+        <Card className="border-primary shadow-lg bg-card/80 backdrop-blur border-t-4">
+          <CardContent className="pt-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-inner ${activeLog ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+                  <Clock size={28} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">{activeLog ? "Currently Clocked In" : "Not Clocked In"}</h3>
+                  {activeLog && (
+                    <p className="text-muted-foreground font-mono text-sm mt-0.5">
+                      Since {format(new Date(activeLog.actualIn), 'h:mm a')} ({formatDistanceStrict(new Date(activeLog.actualIn), new Date())} ago)
+                    </p>
+                  )}
+                  {activeLog && !activeLog.locationValid && !activeLog.managerValidated && (
+                    <p className="text-amber-600 dark:text-amber-400 text-xs mt-1 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Pending manager location review
+                    </p>
+                  )}
+                </div>
               </div>
               <div>
-                <h3 className="text-xl font-bold">{activeLog ? "Currently Clocked In" : "Not Clocked In"}</h3>
-                {activeLog && (
-                  <p className="text-muted-foreground font-mono text-sm mt-0.5">
-                    Since {format(new Date(activeLog.actualIn), 'h:mm a')} ({formatDistanceStrict(new Date(activeLog.actualIn), new Date())} ago)
-                  </p>
-                )}
-                {activeLog && !activeLog.locationValid && !activeLog.managerValidated && (
-                  <p className="text-amber-600 dark:text-amber-400 text-xs mt-1 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Pending manager location review
-                  </p>
+                {!activeLog ? (
+                  <Button size="lg" className="w-36 font-bold" onClick={openClockInDialog} disabled={clockIn.isPending}>
+                    <Play className="mr-2 h-4 w-4" /> Clock In
+                  </Button>
+                ) : (
+                  <Button size="lg" variant="destructive" className="w-36 font-bold" onClick={handleClockOut} disabled={clockOut.isPending}>
+                    <Square className="mr-2 h-4 w-4" /> Clock Out
+                  </Button>
                 )}
               </div>
             </div>
-            <div>
-              {!activeLog ? (
-                <Button size="lg" className="w-36 font-bold" onClick={openClockInDialog} disabled={clockIn.isPending}>
-                  <Play className="mr-2 h-4 w-4" /> Clock In
-                </Button>
-              ) : (
-                <Button size="lg" variant="destructive" className="w-36 font-bold" onClick={handleClockOut} disabled={clockOut.isPending}>
-                  <Square className="mr-2 h-4 w-4" /> Clock Out
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Validation legend for managers */}
       {isManager && (

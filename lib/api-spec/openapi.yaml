@@ -960,6 +960,11 @@ components:
         logoUrl:
           type: string
           nullable: true
+        logoText:
+          type: string
+          nullable: true
+        currency:
+          type: string
         address:
           type: string
           nullable: true
@@ -972,10 +977,21 @@ components:
           type: integer
         overtimeThreshold:
           type: string
+        customDomain:
+          type: string
+          nullable: true
+          description: Custom domain the company has pointed at the platform (platform-admin managed).
+        domainStatus:
+          type: string
+          enum: [none, pending, verified, failed]
+        domainVerifiedAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
-      required: [id, name, status, plan, timezone, weekStartDay, overtimeThreshold]
+      required: [id, name, status, plan, timezone, weekStartDay, overtimeThreshold, currency]
 
     UpdateCompanyRequest:
       type: object
@@ -999,6 +1015,11 @@ components:
         logoUrl:
           type: string
           nullable: true
+        logoText:
+          type: string
+          nullable: true
+        currency:
+          type: string
 
     # ── Workplace ────────────────────────────────────────────────────────────
 
