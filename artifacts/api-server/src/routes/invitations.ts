@@ -8,6 +8,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { sendEmail, SmtpConfig } from "../lib/email";
 import { renderBrandedEmail } from "../lib/email-templates";
+import { emailEq, normalizeEmail } from "../lib/email-normalize";
 
 const router = Router();
 router.use(requireAuth);
@@ -64,7 +65,7 @@ router.post("/", requireRole("admin", "manager"), async (req, res) => {
     .insert(invitations)
     .values({
       companyId,
-      email: parsed.data.email,
+      email: normalizeEmail(parsed.data.email),
       role: targetRole,
       invitedBy: userId,
       token,

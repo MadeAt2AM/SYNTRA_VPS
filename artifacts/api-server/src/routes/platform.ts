@@ -13,6 +13,7 @@ import { parseId } from "../lib/parse-id";
 import { z } from "zod";
 import { normalizeDomain, isValidHostname, checkDomainDns, getPlatformTargets } from "../lib/domain";
 import { sendEmail, testSmtp, type SmtpConfig } from "../lib/email";
+import { emailEq, normalizeEmail } from "../lib/email-normalize";
 import { renderBrandedEmail } from "../lib/email-templates";
 
 const router = Router();
@@ -101,12 +102,13 @@ router.post("/companies", async (req, res) => {
     return;
   }
   const { name, ownerName, ownerEmail, ownerTempPassword, plan, timezone } = parsed.data;
+  const normalizedOwnerEmail = normalizeEmail(ownerEmail);
 
   // Check email not already in use
   const existing = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.email, ownerEmail))
+    .where(emailEq(users.email, normalizedOwnerEmail))
     .limit(1);
   if (existing.length > 0) {
     res.status(409).json({ error: "Email already in use" });
@@ -123,7 +125,7 @@ router.post("/companies", async (req, res) => {
     .insert(users)
     .values({
       companyId: company.id,
-      email: ownerEmail,
+      email: normalizedOwnerEmail,
       name: ownerName,
       passwordHash,
       role: "admin",
@@ -380,9 +382,9 @@ router.post("/admins", async (req, res) => {
     return;
   }
   const { name, email, tempPassword } = parsed.data;
-  const normalizedEmail = email.toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
 
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalizedEmail)).limit(1);
+  const [existing] = await db.select({ id: users.id }).from(users).where(emailEq(users.email, normalizedEmail)).limit(1);
   if (existing) {
     res.status(409).json({ error: "Email already in use" });
     return;

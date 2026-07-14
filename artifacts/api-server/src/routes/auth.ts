@@ -6,6 +6,7 @@ import { users, invitations, companies } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, signToken } from "../middlewares/auth";
 import { sendEmail, SmtpConfig } from "../lib/email";
+import { emailEq, normalizeEmail } from "../lib/email-normalize";
 import { loginIpLimiter, loginEmailLimiter } from "../middlewares/rate-limit";
 import { renderBrandedEmail } from "../lib/email-templates";
 import { z } from "zod";
@@ -39,7 +40,7 @@ router.post("/register", async (req, res) => {
   }
   // Normalize case so "User@Acme.com" and "user@acme.com" are treated as the
   // same identity everywhere (uniqueness check, storage, invitation match).
-  const email = parsed.data.email.toLowerCase();
+  const email = normalizeEmail(parsed.data.email);
   const { password, name, companyName, invitationToken } = parsed.data;
 
   if (!companyName && !invitationToken) {
@@ -157,12 +158,13 @@ router.post("/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { email, password } = parsed.data;
+  const { email: rawEmail, password } = parsed.data;
+  const email = normalizeEmail(rawEmail);
 
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(emailEq(users.email, email))
     .limit(1);
 
   if (!user) {
@@ -288,13 +290,13 @@ router.post("/forgot-password", async (req, res) => {
     return;
   }
 
-  const email = parsed.data.email.toLowerCase();
+  const email = normalizeEmail(parsed.data.email);
 
   // Always respond 200 so we don't reveal whether an account exists
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(emailEq(users.email, email))
     .limit(1);
 
   if (user) {
