@@ -139,7 +139,15 @@ router.post("/companies", async (req, res) => {
       mustChangePassword: users.mustChangePassword,
     });
 
-  res.status(201).json({ company, owner });
+  res.status(201).json({
+    company,
+    owner,
+    // Echo the plaintext temp password back exactly once so the platform
+    // admin can share it with the new tenant owner. It is never stored in
+    // plaintext (only bcrypt-hashed in users.password_hash) and never
+    // re-served by GET endpoints.
+    tempPassword: ownerTempPassword,
+  });
 });
 
 /** GET /api/platform/companies/:id */
@@ -366,7 +374,12 @@ router.post("/companies/:id/admins", async (req, res) => {
     req.log?.warn({ err }, "Failed to send new-admin welcome email");
   }
 
-  res.status(201).json(admin);
+  res.status(201).json({
+    ...admin,
+    // Echo the plaintext temp password back exactly once so the platform
+    // admin can share it. Never stored in plaintext, never re-served.
+    tempPassword,
+  });
 });
 
 /**

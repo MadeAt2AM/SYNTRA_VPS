@@ -284,11 +284,43 @@ export default function PlatformPage() {
     });
   }
 
-  function copyPassword() {
-    if (result?.owner) {
-      navigator.clipboard.writeText(form.getValues("ownerTempPassword") || "");
+  // Pull the temp password straight from the API response. Reading it
+  // from the form state used to break because the form is reset on
+  // success — leaving the field blank right when we need to display it.
+  // The server only echoes the plaintext temp password once (in the 201
+  // response of POST /api/platform/companies), and never re-serves it
+  // from GET endpoints, so this is the only place we can read it.
+  const tempPassword = result?.tempPassword ?? "";
+
+  async function copyPassword() {
+    if (!tempPassword) return;
+    try {
+      // Prefer the async Clipboard API (requires HTTPS + user gesture —
+      // both true here because this fires from a button click on
+      // syntra.terrybot.top). Fall back to the legacy document.execCommand
+      // path on older browsers / non-secure contexts.
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(tempPassword);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = tempPassword;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      // Surface a toast rather than failing silently — the user clicked
+      // the button expecting something to happen.
+      toast({
+        title: "Could not copy",
+        description: "Your browser blocked clipboard access. Select the password and copy manually.",
+        variant: "destructive",
+      });
     }
   }
 
@@ -352,8 +384,8 @@ export default function PlatformPage() {
                   <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                     <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold mb-2 uppercase tracking-wider">Temporary Password — Share with owner</p>
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 font-mono text-sm bg-background rounded border px-3 py-2">
-                        {showPass ? form.getValues("ownerTempPassword") : "••••••••••••"}
+                      <div className="flex-1 font-mono text-sm bg-background rounded border px-3 py-2 select-all" data-testid="temp-password">
+                        {showPass ? tempPassword : (tempPassword ? "••••••••••••" : "—")}
                       </div>
                       <Button size="icon" variant="ghost" onClick={() => setShowPass(s => !s)}>
                         {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
