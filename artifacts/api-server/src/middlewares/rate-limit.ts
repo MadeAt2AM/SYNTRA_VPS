@@ -1,4 +1,5 @@
 import rateLimit from "express-rate-limit";
+import { normalizeEmail } from "../lib/email-normalize";
 
 /**
  * Rate limiter for authentication endpoints.
@@ -19,11 +20,19 @@ export const loginIpLimiter = rateLimit({
   message: { error: "Too many login attempts. Please try again in 15 minutes." },
 });
 
+export function loginRateLimitKey(rawEmail: unknown, clientIp: string): string {
+  if (typeof rawEmail === "string" && rawEmail.trim()) {
+    return normalizeEmail(rawEmail);
+  }
+  return `ip:${clientIp}`;
+}
+
 export const loginEmailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => loginRateLimitKey(req.body?.email, req.ip || "unknown"),
   message: { error: "Too many attempts for this account. Please try again in 15 minutes." },
 });
 
