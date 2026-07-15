@@ -30,6 +30,7 @@ router.get("/branding", async (req, res) => {
       name: companies.name,
       logoUrl: companies.logoUrl,
       logoText: companies.logoText,
+      status: companies.status,
       domainStatus: companies.domainStatus,
     })
     .from(companies)
@@ -38,7 +39,7 @@ router.get("/branding", async (req, res) => {
 
   // Only brand the login experience once the domain is verified so a
   // misconfigured/unclaimed record can't spoof another company's page.
-  if (!company || company.domainStatus !== "verified") {
+  if (!company || company.status !== "active" || company.domainStatus !== "verified") {
     res.json({ branded: false });
     return;
   }

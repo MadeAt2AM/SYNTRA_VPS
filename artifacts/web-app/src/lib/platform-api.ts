@@ -11,6 +11,7 @@ async function fetchPlatform<T>(endpoint: string, options?: RequestInit): Promis
     const body = await res.json().catch(() => ({}));
     throw Object.assign(new Error("Platform API error"), { data: body, status: res.status });
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -139,20 +140,13 @@ export function usePlatformUpdateCompany() {
 }
 
 /**
- * Soft-delete a company (sets `status='inactive'`). The Delete button in
- * the platform admin dashboard wires to this; "Restore" is just a PUT with
- * `{ status: 'active' }` via `usePlatformUpdateCompany`.
+ * Permanently delete a company. The API intentionally returns no body on
+ * success because the row and its dependent data no longer exist.
  */
-export interface DeletedCompanyRow {
-  id: number;
-  name: string;
-  status: string;
-}
-
 export function usePlatformDeleteCompany() {
   return useMutation({
     mutationFn: (id: number) =>
-      fetchPlatform<DeletedCompanyRow>(`/api/platform/companies/${id}`, {
+      fetchPlatform<void>(`/api/platform/companies/${id}`, {
         method: 'DELETE',
       }),
   });

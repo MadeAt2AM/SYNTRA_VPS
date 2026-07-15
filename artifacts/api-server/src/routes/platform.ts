@@ -74,13 +74,10 @@ const platformSettingsSchema = z.object({
 });
 
 /** GET /api/platform/companies
- *  Pass `?includeInactive=true` to also return soft-deleted companies
- *  (status='inactive'). Default behaviour hides them so the platform admin
- *  dashboard doesn't accumulate zombie rows after a "Delete" action.
+ * Returns every company. Inactive companies remain visible so the platform
+ * operator can reactivate them or deliberately hard-delete them.
  */
-router.get("/companies", async (req, res) => {
-  const includeInactive = req.query["includeInactive"] === "true";
-  const where = includeInactive ? undefined : eq(companies.status, "active");
+router.get("/companies", async (_req, res) => {
   const result = await db
     .select({
       id: companies.id,
@@ -93,7 +90,6 @@ router.get("/companies", async (req, res) => {
       createdAt: companies.createdAt,
     })
     .from(companies)
-    .where(where as any)
     .orderBy(sql`${companies.createdAt} desc nulls last`);
   res.json(result);
 });
@@ -291,20 +287,26 @@ router.post("/companies/:id/domain/verify", async (req, res) => {
   res.json({ ...updated, checkDetail: result.detail, method: result.method });
 });
 
-/** DELETE /api/platform/companies/:id — soft delete */
+/**
+ * Permanently deletes a company and all tenant-owned data through the
+ * database's ON DELETE CASCADE relationships. This is intentionally separate
+ * from deactivation: deletion cannot be restored.
+ */
 router.delete("/companies/:id", async (req, res) => {
   const id = parseId(req.params["id"], res);
   if (id === null) return;
-  const [updated] = await db
-    .update(companies)
-    .set({ status: "inactive" })
+
+  const [deleted] = await db
+    .delete(companies)
     .where(eq(companies.id, id))
-    .returning({ id: companies.id, name: companies.name, status: companies.status });
-  if (!updated) {
+    .returning({ id: companies.id, name: companies.name });
+
+  if (!deleted) {
     res.status(404).json({ error: "Company not found" });
     return;
   }
-  res.json(updated);
+
+  res.status(204).send();
 });
 
 /**

@@ -61,8 +61,9 @@ export default function LoginPage() {
           setLocation(role === "platform_admin" ? "/platform" : "/dashboard");
         }
       },
-      onError: () => {
-        toast({ title: "Login failed", description: "Invalid email or password.", variant: "destructive" });
+      onError: (err: any) => {
+        const body = err?.data;
+        toast({ title: "Login failed", description: body?.error === "Invalid user" ? "Invalid user" : "Invalid email or password.", variant: "destructive" });
       }
     });
   }

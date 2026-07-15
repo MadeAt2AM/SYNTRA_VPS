@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 - [x] **F15: Custom-domain post-auth redirect** — `/api/auth/login` and `/api/auth/register` (both flows) now return `redirectTo: "https://<custom-domain>/<path>"` when the user belongs to a company with a verified custom domain and they hit the API from a different origin. The SPA honours it via `window.location.assign` (a hard nav that writes `localStorage` before the bounce, so the new origin sees the session immediately). The redirect host is gated through an operator-managed allowlist at `/srv/secrets/syntra-custom-domains` so a poisoned `companies.custom_domain` row can never cause an open-redirect.
 - [x] **F16: CORS allowlist is now allow-list based, not hard-coded** — `/api/cors` middleware merges `ALLOWED_ORIGINS` env + `REPLIT_DOMAINS` + the custom-domain sidecar. Adding a new custom domain to the sidecar makes it both Caddy-served AND CORS-allowed without a code change.
-- [x] **F17: Platform admin delete-company + Include-inactive** — `GET /api/platform/companies` now hides inactive rows by default (`?includeInactive=true` to show them). The platform admin table gets a per-row Delete button (with confirmation dialog) and a Restore button for inactive rows. Soft-delete only — historical users, shifts, invitations are preserved.
+- [x] **F17: Platform admin company lifecycle** — the platform dashboard always shows inactive companies greyed out, with Deactivate/Reactivate controls. Delete is a separate confirmed hard delete: it removes the company row and all tenant-owned dependent data through PostgreSQL `ON DELETE CASCADE`; inactive rows remain preserved and reactivatable.
 
 ---
 

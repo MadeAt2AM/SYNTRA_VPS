@@ -17,7 +17,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState, MouseEvent } from "react";
-import { Building, Users, Activity, Plus, Copy, CheckCircle2, Eye, EyeOff, LogIn, Pencil, Globe, ShieldPlus, RefreshCw, Mail, Settings as SettingsIcon, Send, Trash2, RotateCcw } from "lucide-react";
+import { Building, Users, Activity, Plus, Copy, CheckCircle2, Eye, EyeOff, LogIn, Pencil, Globe, ShieldPlus, RefreshCw, Mail, Settings as SettingsIcon, Send, Trash2, RotateCcw, Power } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -71,8 +71,7 @@ export default function PlatformPage() {
   const { toast } = useToast();
   const { login } = useAuth();
   const [, navigate] = useLocation();
-  // Delete-company state
-  const [includeInactive, setIncludeInactive] = useState(false);
+  // Company lifecycle state
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>("");
   const deleteCompany = usePlatformDeleteCompany();
@@ -94,36 +93,45 @@ export default function PlatformPage() {
     deleteCompany.mutate(idToDelete, {
       onSuccess: () => {
         cancelDelete();
-        // Refresh BOTH possible cached lists — the active one the user is
-        // currently viewing, and the inactive one in case they had it on.
+        setDetailCompanyId(null);
         queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] });
-        toast({ title: "Company removed", description: "It can be restored from the platform DB if needed." });
+        queryClient.invalidateQueries({ queryKey: ['platform', 'stats'] });
+        toast({ title: "Company permanently deleted", description: "All company data was removed." });
       },
       onError: (err: any) => {
-        cancelDelete();
         toast({ title: "Delete failed", description: err?.data?.error || "Could not delete this company.", variant: "destructive" });
       },
     });
   }
 
-  function handleRestore(id: number, e: MouseEvent) {
+  function handleDeactivate(id: number, e: MouseEvent) {
     e.stopPropagation();
-    updateCompany.mutate(
-      { id, data: { status: "active" } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] });
-          toast({ title: "Company restored" });
-        },
-        onError: (err: any) => {
-          toast({ title: "Restore failed", description: err?.data?.error || "Could not restore this company.", variant: "destructive" });
-        },
+    updateCompany.mutate({ id, data: { status: "inactive" } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] });
+        queryClient.invalidateQueries({ queryKey: ['platform', 'stats'] });
+        toast({ title: "Company deactivated", description: "Users can no longer sign in until it is reactivated." });
       },
-    );
+      onError: (err: any) => toast({ title: "Deactivation failed", description: err?.data?.error || "Could not deactivate this company.", variant: "destructive" }),
+    });
+  }
+
+  function handleReactivate(id: number, e: MouseEvent) {
+    e.stopPropagation();
+    updateCompany.mutate({ id, data: { status: "active" } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] });
+        queryClient.invalidateQueries({ queryKey: ['platform', 'stats'] });
+        toast({ title: "Company reactivated", description: "Users can sign in again." });
+      },
+      onError: (err: any) => toast({ title: "Reactivation failed", description: err?.data?.error || "Could not reactivate this company.", variant: "destructive" }),
+    });
   }
 
   const { data: stats, isLoading: statsLoading } = usePlatformStats();
-  const { data: companies = [], isLoading: companiesLoading } = usePlatformCompanies(includeInactive);
+  // The platform dashboard always shows inactive companies. Deactivation is
+  // reversible; deletion is a separate destructive action.
+  const { data: companies = [], isLoading: companiesLoading } = usePlatformCompanies();
   const createCompany = usePlatformCreateCompany();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<CreateCompanyResult | null>(null);
@@ -414,16 +422,9 @@ export default function PlatformPage() {
         <div className="flex justify-between items-center flex-wrap gap-3">
           <h2 className="text-xl font-bold font-sans tracking-tight">Companies</h2>
           <div className="flex items-center gap-3 flex-wrap">
-            <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border accent-primary"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-                data-testid="include-inactive-toggle"
-              />
-              Include inactive
-            </label>
+            <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+              Inactive companies remain visible and greyed out
+            </span>
             <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
               <DialogTrigger asChild>
                 <Button className="font-semibold"><Plus className="w-4 h-4 mr-2" /> New Company</Button>
@@ -549,11 +550,15 @@ export default function PlatformPage() {
                   <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
                 ) : companies.length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    {includeInactive ? "No companies at all." : "No active companies. Toggle \"Include inactive\" to see removed ones."}
+                    No companies.
                   </TableCell></TableRow>
                 ) : (
                   companies.map((company: PlatformCompany) => (
-                    <TableRow key={company.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => setDetailCompanyId(company.id)}>
+                    <TableRow
+                      key={company.id}
+                      className={`hover:bg-muted/30 cursor-pointer ${company.status !== 'active' ? "opacity-60 grayscale" : ""}`}
+                      onClick={() => setDetailCompanyId(company.id)}
+                    >
                       <TableCell className="font-mono text-xs text-muted-foreground">#{company.id}</TableCell>
                       <TableCell className="font-semibold">{company.name}</TableCell>
                       <TableCell>
@@ -577,18 +582,30 @@ export default function PlatformPage() {
                         {company.createdAt ? format(new Date(company.createdAt), 'MMM d, yyyy') : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {company.status === 'inactive' ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
-                            disabled={updateCompany.isPending}
-                            onClick={(e) => handleRestore(company.id, e)}
-                            data-testid={`restore-company-${company.id}`}
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" /> Restore
-                          </Button>
-                        ) : (
+                        <div className="flex justify-end gap-1">
+                          {company.status === 'active' ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1.5 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                              disabled={updateCompany.isPending}
+                              onClick={(e) => handleDeactivate(company.id, e)}
+                              data-testid={`deactivate-company-${company.id}`}
+                            >
+                              <Power className="h-3.5 w-3.5" /> Deactivate
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                              disabled={updateCompany.isPending}
+                              onClick={(e) => handleReactivate(company.id, e)}
+                              data-testid={`reactivate-company-${company.id}`}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" /> Reactivate
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -598,7 +615,7 @@ export default function PlatformPage() {
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Delete
                           </Button>
-                        )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -1012,7 +1029,7 @@ export default function PlatformPage() {
               <Trash2 className="h-4 w-4" /> Delete company?
             </DialogTitle>
             <DialogDescription>
-              <span className="font-semibold text-foreground">{confirmDeleteName}</span> will be deactivated and hidden from the active companies list. All existing users, shifts, invitations and historical data are preserved — you can restore it via "Include inactive" → Restore later.
+              <span className="font-semibold text-foreground">{confirmDeleteName}</span> and all associated data will be permanently deleted. All company users, shifts, invitations and historical data will be permanently deleted. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
@@ -1027,7 +1044,7 @@ export default function PlatformPage() {
               onClick={confirmDelete}
               data-testid="confirm-delete-company"
             >
-              {deleteCompany.isPending ? "Removing…" : "Delete company"}
+              {deleteCompany.isPending ? "Deleting…" : "Delete permanently"}
             </Button>
           </div>
         </DialogContent>

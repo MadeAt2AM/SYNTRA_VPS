@@ -9,7 +9,8 @@ import { sendEmail, SmtpConfig } from "../lib/email";
 import { emailEq, normalizeEmail } from "../lib/email-normalize";
 import { loginIpLimiter, loginEmailLimiter } from "../middlewares/rate-limit";
 import { renderBrandedEmail } from "../lib/email-templates";
-import { buildCustomDomainUrl, normalizeDomain } from "../lib/domain";
+import { buildCustomDomainUrl, isKnownCustomDomain, normalizeDomain } from "../lib/domain";
+import { isLoginAllowed } from "../lib/login-access";
 import { z } from "zod";
 
 const router = Router();
@@ -198,8 +199,19 @@ router.post("/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
   const email = normalizeEmail(rawEmail);
 
   const [user] = await db
-    .select()
+    .select({
+      id: users.id,
+      companyId: users.companyId,
+      email: users.email,
+      passwordHash: users.passwordHash,
+      name: users.name,
+      role: users.role,
+      status: users.status,
+      mustChangePassword: users.mustChangePassword,
+      companyStatus: companies.status,
+    })
     .from(users)
+    .leftJoin(companies, eq(companies.id, users.companyId))
     .where(emailEq(users.email, email))
     .limit(1);
 
@@ -219,6 +231,28 @@ router.post("/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
   }
   if (user.status !== "active") {
     res.status(403).json({ error: "Account is not active" });
+    return;
+  }
+
+  const requestHost = normalizeDomain(req.hostname || "");
+  let customDomainCompanyId: number | null = null;
+  if (isKnownCustomDomain(requestHost)) {
+    const [domainCompany] = await db
+      .select({ id: companies.id, domainStatus: companies.domainStatus })
+      .from(companies)
+      .where(eq(companies.customDomain, requestHost))
+      .limit(1);
+    // A served custom host with no verified owner must fail closed.
+    customDomainCompanyId = domainCompany?.domainStatus === "verified" ? domainCompany.id : -1;
+  }
+
+  if (!isLoginAllowed({
+    userRole: user.role,
+    userCompanyId: user.companyId,
+    userCompanyStatus: user.companyStatus,
+    customDomainCompanyId,
+  })) {
+    res.status(401).json({ error: "Invalid user" });
     return;
   }
 
