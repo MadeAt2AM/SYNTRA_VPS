@@ -59,10 +59,13 @@ export function usePlatformStats() {
   });
 }
 
-export function usePlatformCompanies() {
+export function usePlatformCompanies(includeInactive = false) {
   return useQuery({
-    queryKey: ['platform', 'companies'],
-    queryFn: () => fetchPlatform<PlatformCompany[]>('/api/platform/companies'),
+    queryKey: ['platform', 'companies', includeInactive],
+    queryFn: () =>
+      fetchPlatform<PlatformCompany[]>(
+        `/api/platform/companies${includeInactive ? '?includeInactive=true' : ''}`,
+      ),
   });
 }
 
@@ -131,6 +134,26 @@ export function usePlatformUpdateCompany() {
       fetchPlatform<PlatformCompanyDetail>(`/api/platform/companies/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
+      }),
+  });
+}
+
+/**
+ * Soft-delete a company (sets `status='inactive'`). The Delete button in
+ * the platform admin dashboard wires to this; "Restore" is just a PUT with
+ * `{ status: 'active' }` via `usePlatformUpdateCompany`.
+ */
+export interface DeletedCompanyRow {
+  id: number;
+  name: string;
+  status: string;
+}
+
+export function usePlatformDeleteCompany() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      fetchPlatform<DeletedCompanyRow>(`/api/platform/companies/${id}`, {
+        method: 'DELETE',
       }),
   });
 }

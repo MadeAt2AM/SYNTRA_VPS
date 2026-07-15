@@ -2,6 +2,7 @@ import {
   usePlatformStats, usePlatformCompanies, usePlatformCreateCompany, usePlatformCompany, usePlatformImpersonate,
   usePlatformUpdateCompany, usePlatformVerifyDomain, usePlatformDomainInstructions, usePlatformAddAdmin,
   usePlatformAdmins, usePlatformAddPlatformAdmin, usePlatformSettings, usePlatformSaveSettings, usePlatformTestSmtp,
+  usePlatformDeleteCompany,
 } from "@/lib/platform-api";
 import type { CreateCompanyResult, PlatformCompany, PlatformCompanyUser, PlatformAdminUser } from "@/lib/platform-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,8 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useState } from "react";
-import { Building, Users, Activity, Plus, Copy, CheckCircle2, Eye, EyeOff, LogIn, Pencil, Globe, ShieldPlus, RefreshCw, Mail, Settings as SettingsIcon, Send } from "lucide-react";
+import { useState, MouseEvent } from "react";
+import { Building, Users, Activity, Plus, Copy, CheckCircle2, Eye, EyeOff, LogIn, Pencil, Globe, ShieldPlus, RefreshCw, Mail, Settings as SettingsIcon, Send, Trash2, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -70,8 +71,59 @@ export default function PlatformPage() {
   const { toast } = useToast();
   const { login } = useAuth();
   const [, navigate] = useLocation();
+  // Delete-company state
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmDeleteName, setConfirmDeleteName] = useState<string>("");
+  const deleteCompany = usePlatformDeleteCompany();
+
+  function requestDelete(id: number, name: string, e: MouseEvent) {
+    e.stopPropagation();
+    setConfirmDeleteId(id);
+    setConfirmDeleteName(name);
+  }
+
+  function cancelDelete() {
+    setConfirmDeleteId(null);
+    setConfirmDeleteName("");
+  }
+
+  function confirmDelete() {
+    if (confirmDeleteId == null) return;
+    const idToDelete = confirmDeleteId;
+    deleteCompany.mutate(idToDelete, {
+      onSuccess: () => {
+        cancelDelete();
+        // Refresh BOTH possible cached lists — the active one the user is
+        // currently viewing, and the inactive one in case they had it on.
+        queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] });
+        toast({ title: "Company removed", description: "It can be restored from the platform DB if needed." });
+      },
+      onError: (err: any) => {
+        cancelDelete();
+        toast({ title: "Delete failed", description: err?.data?.error || "Could not delete this company.", variant: "destructive" });
+      },
+    });
+  }
+
+  function handleRestore(id: number, e: MouseEvent) {
+    e.stopPropagation();
+    updateCompany.mutate(
+      { id, data: { status: "active" } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] });
+          toast({ title: "Company restored" });
+        },
+        onError: (err: any) => {
+          toast({ title: "Restore failed", description: err?.data?.error || "Could not restore this company.", variant: "destructive" });
+        },
+      },
+    );
+  }
+
   const { data: stats, isLoading: statsLoading } = usePlatformStats();
-  const { data: companies = [], isLoading: companiesLoading } = usePlatformCompanies();
+  const { data: companies = [], isLoading: companiesLoading } = usePlatformCompanies(includeInactive);
   const createCompany = usePlatformCreateCompany();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<CreateCompanyResult | null>(null);
@@ -361,10 +413,21 @@ export default function PlatformPage() {
       <div className="space-y-4">
         <div className="flex justify-between items-center flex-wrap gap-3">
           <h2 className="text-xl font-bold font-sans tracking-tight">Companies</h2>
-          <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
-            <DialogTrigger asChild>
-              <Button className="font-semibold"><Plus className="w-4 h-4 mr-2" /> New Company</Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border accent-primary"
+                checked={includeInactive}
+                onChange={(e) => setIncludeInactive(e.target.checked)}
+                data-testid="include-inactive-toggle"
+              />
+              Include inactive
+            </label>
+            <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else setOpen(true); }}>
+              <DialogTrigger asChild>
+                <Button className="font-semibold"><Plus className="w-4 h-4 mr-2" /> New Company</Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>{result ? "Company Created!" : "Create Company"}</DialogTitle>
@@ -464,6 +527,7 @@ export default function PlatformPage() {
               )}
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
@@ -477,13 +541,16 @@ export default function PlatformPage() {
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Plan</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider">Domain</TableHead>
                   <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Created</TableHead>
+                  <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {companiesLoading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
                 ) : companies.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No companies yet. Create your first one above.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    {includeInactive ? "No companies at all." : "No active companies. Toggle \"Include inactive\" to see removed ones."}
+                  </TableCell></TableRow>
                 ) : (
                   companies.map((company: PlatformCompany) => (
                     <TableRow key={company.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => setDetailCompanyId(company.id)}>
@@ -508,6 +575,30 @@ export default function PlatformPage() {
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground">
                         {company.createdAt ? format(new Date(company.createdAt), 'MMM d, yyyy') : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {company.status === 'inactive' ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                            disabled={updateCompany.isPending}
+                            onClick={(e) => handleRestore(company.id, e)}
+                            data-testid={`restore-company-${company.id}`}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" /> Restore
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => requestDelete(company.id, company.name, e)}
+                            data-testid={`delete-company-${company.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Delete
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
@@ -910,6 +1001,35 @@ export default function PlatformPage() {
               </div>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Company Confirmation Dialog ── */}
+      <Dialog open={confirmDeleteId !== null} onOpenChange={(v) => { if (!v) cancelDelete(); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-4 w-4" /> Delete company?
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-semibold text-foreground">{confirmDeleteName}</span> will be deactivated and hidden from the active companies list. All existing users, shifts, invitations and historical data are preserved — you can restore it via "Include inactive" → Restore later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={cancelDelete} disabled={deleteCompany.isPending}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="font-semibold"
+              disabled={deleteCompany.isPending}
+              onClick={confirmDelete}
+              data-testid="confirm-delete-company"
+            >
+              {deleteCompany.isPending ? "Removing…" : "Delete company"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import { companies, users, platformSettings } from "@workspace/db";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { requireAuth, requirePlatformAdmin, signToken } from "../middlewares/auth";
 import { parseId } from "../lib/parse-id";
 import { z } from "zod";
@@ -73,8 +73,14 @@ const platformSettingsSchema = z.object({
   contactEmailFrom: z.string().min(1).optional().nullable(),
 });
 
-/** GET /api/platform/companies */
-router.get("/companies", async (_req, res) => {
+/** GET /api/platform/companies
+ *  Pass `?includeInactive=true` to also return soft-deleted companies
+ *  (status='inactive'). Default behaviour hides them so the platform admin
+ *  dashboard doesn't accumulate zombie rows after a "Delete" action.
+ */
+router.get("/companies", async (req, res) => {
+  const includeInactive = req.query["includeInactive"] === "true";
+  const where = includeInactive ? undefined : eq(companies.status, "active");
   const result = await db
     .select({
       id: companies.id,
@@ -86,7 +92,9 @@ router.get("/companies", async (_req, res) => {
       domainStatus: companies.domainStatus,
       createdAt: companies.createdAt,
     })
-    .from(companies);
+    .from(companies)
+    .where(where as any)
+    .orderBy(sql`${companies.createdAt} desc nulls last`);
   res.json(result);
 });
 
