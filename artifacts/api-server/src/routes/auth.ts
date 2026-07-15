@@ -9,9 +9,33 @@ import { sendEmail, SmtpConfig } from "../lib/email";
 import { emailEq, normalizeEmail } from "../lib/email-normalize";
 import { loginIpLimiter, loginEmailLimiter } from "../middlewares/rate-limit";
 import { renderBrandedEmail } from "../lib/email-templates";
+import { buildCustomDomainUrl, normalizeDomain } from "../lib/domain";
 import { z } from "zod";
 
 const router = Router();
+
+/**
+ * If the user's company has a verified `customDomain` that differs from the
+ * host the request came in on, return the absolute URL on that custom domain
+ * that the client should bounce to after this auth handshake completes.
+ *
+ * The `redirectTo` is ONLY populated when:
+ *   - the company row has `customDomain` set + `domainStatus === "verified"` AND
+ *   - the request's Host differs from that customDomain AND
+ *   - the destination host is in `getCustomDomainHosts()` (open-redirect guard)
+ *
+ * Returns `null` in every other case so callers can fall back to in-app routing.
+ */
+function resolvePostAuthRedirect(
+  reqHost: string,
+  company: { customDomain: string | null; domainStatus: string | null } | undefined | null,
+  destPath: string,
+): string | null {
+  if (!company?.customDomain || company.domainStatus !== "verified") return null;
+  const target = normalizeDomain(company.customDomain);
+  if (!target || normalizeDomain(reqHost) === target) return null;
+  return buildCustomDomainUrl(target, destPath);
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -108,8 +132,18 @@ router.post("/register", async (req, res) => {
       .where(eq(invitations.id, invitation.id));
 
     const token = signToken({ userId: user.id, companyId: user.companyId, role: user.role });
+
+    let redirectTo: string | null = null;
+    const [company] = await db
+      .select({ customDomain: companies.customDomain, domainStatus: companies.domainStatus })
+      .from(companies)
+      .where(eq(companies.id, user.companyId!))
+      .limit(1);
+    redirectTo = resolvePostAuthRedirect(req.hostname || "", company, "/dashboard");
+
     res.status(201).json({
       token,
+      redirectTo,
       user: {
         id: user.id,
         email: user.email,
@@ -139,8 +173,10 @@ router.post("/register", async (req, res) => {
     .returning();
 
   const token = signToken({ userId: user.id, companyId: user.companyId, role: user.role });
+  const redirectTo = resolvePostAuthRedirect(req.hostname || "", company, "/dashboard");
   res.status(201).json({
     token,
+    redirectTo,
     user: {
       id: user.id,
       email: user.email,
@@ -191,8 +227,25 @@ router.post("/login", loginIpLimiter, loginEmailLimiter, async (req, res) => {
     companyId: user.companyId,
     role: user.role,
   });
+
+  // If the user's company has a verified customDomain and the request came
+  // in on a different host (typically the platform's own syntra.terrybot.top),
+  // tell the client to bounce to the company's own URL so the rest of the
+  // session — token storage, branding, password-reset links, etc. — happens
+  // on the customer's white-label origin.
+  let redirectTo: string | null = null;
+  if (user.companyId) {
+    const [company] = await db
+      .select({ customDomain: companies.customDomain, domainStatus: companies.domainStatus })
+      .from(companies)
+      .where(eq(companies.id, user.companyId))
+      .limit(1);
+    redirectTo = resolvePostAuthRedirect(req.hostname || "", company, "/dashboard");
+  }
+
   res.json({
     token,
+    redirectTo,
     user: {
       id: user.id,
       email: user.email,

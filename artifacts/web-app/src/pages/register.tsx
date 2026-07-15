@@ -57,15 +57,22 @@ export default function RegisterPage() {
 
     registerMutation.mutate({ data: payload }, {
       onSuccess: (response) => {
+        // Same custom-domain bounce logic as login — see login.tsx.
+        const redirectTo: string | null = (response as any).redirectTo ?? null;
+        if (redirectTo) {
+          login(response.token);
+          window.location.assign(redirectTo);
+          return;
+        }
         login(response.token);
         toast({ title: "Account created", description: "Welcome to ShiftWise!" });
         setLocation("/");
       },
       onError: (err) => {
-        toast({ 
-          title: "Registration failed", 
-          description: err.data?.error || "An error occurred during registration.", 
-          variant: "destructive" 
+        toast({
+          title: "Registration failed",
+          description: err.data?.error || "An error occurred during registration.",
+          variant: "destructive"
         });
       }
     });

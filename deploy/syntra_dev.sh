@@ -104,6 +104,62 @@ ${PROJ_NAME}.${DOMAIN} {
 EOF
 }
 
+# Materialise a separate Caddy site file for verified custom-domain hostnames.
+# Sourced from /srv/secrets/syntra-custom-domains (one hostname per line,
+# `#`-prefixed lines are comments). Each host becomes a site block that
+# reverse-proxies to the same syntra-web container, so all the same security
+# headers from the platform host apply and Let's Encrypt issues a per-host
+# cert automatically.
+#
+# Why a separate file:
+#   * Listed separately in /srv/caddy/sites/ — easier for an operator to see
+#     which custom domains are in scope vs. the platform's own host.
+#   * Editable in-place without a redeploy — touch /srv/secrets/syntra-custom-domains,
+#     re-run this script, Caddy reload picks it up.
+write_extra_caddy() {
+  local EXTRA_HOSTS_FILE="/srv/secrets/syntra-custom-domains"
+  local EXTRA_SITE_FILE="/srv/caddy/sites/${PROJ_NAME}-extra-hosts.caddy"
+
+  # Seed an empty sidecar on first deploy so the operator knows where to add hosts.
+  if [ ! -f "$EXTRA_HOSTS_FILE" ]; then
+    yellow "  → seeding empty $EXTRA_HOSTS_FILE (one hostname per line for verified custom domains)"
+    cat > "$EXTRA_HOSTS_FILE" <<'SEED'
+# Verified custom-domain hostnames this SYNTRA deployment serves.
+# One hostname per line, lines beginning with # are comments.
+# Example:
+#   syntra.cyberslide.net
+SEED
+    chmod 644 "$EXTRA_HOSTS_FILE"
+  fi
+
+  # Build the per-host site blocks. Skip blank and comment lines.
+  yellow "  → materialising extra-hosts site file from $EXTRA_HOSTS_FILE"
+  : > "$EXTRA_SITE_FILE"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"        # strip inline comments
+    line="$(echo "$line" | xargs)"  # trim whitespace
+    [ -z "$line" ] && continue
+    cat >> "$EXTRA_SITE_FILE" <<EOF
+${line} {
+    reverse_proxy ${PROJ_NAME}-web:80
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        Cross-Origin-Opener-Policy "same-origin"
+        -X-Powered-By
+        -Server
+    }
+}
+EOF
+  done < "$EXTRA_HOSTS_FILE"
+  chmod 644 "$EXTRA_SITE_FILE"
+}
+
 do_redeploy() {
   local proj_dir="${PROJECTS_DIR}/${PROJ_NAME}"
   mkdir -p "$PROJECTS_DIR" /srv/caddy/sites
@@ -150,6 +206,7 @@ do_redeploy() {
   docker compose up -d --build 2>&1 | tail -10
 
   write_caddy
+  write_extra_caddy
   ensure_dns
 
   yellow "  → caddy reload"
@@ -198,8 +255,8 @@ case "$cmd" in
     fi
     yellow "  → removing $proj_dir"
     rm -rf "$proj_dir"
-    yellow "  → removing caddy site block"
-    rm -f "$Caddy_FILE"
+    yellow "  → removing caddy site blocks"
+    rm -f "$Caddy_FILE" "/srv/caddy/sites/${PROJ_NAME}-extra-hosts.caddy"
     docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>&1 | tail -3 || true
     green "  ✓ teardown complete"
     ;;

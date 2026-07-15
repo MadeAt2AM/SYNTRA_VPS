@@ -41,6 +41,18 @@ export default function LoginPage() {
     loginMutation.mutate({ data: values }, {
       onSuccess: (response) => {
         const mustChange = (response as any).user?.mustChangePassword ?? false;
+        // If the API says this user's company has a verified customDomain
+        // and the request came in on a different host, bounce the WHOLE
+        // session to that domain so localStorage, cookies, branding, and
+        // future redirects all live on the customer's origin.
+        const redirectTo: string | null = (response as any).redirectTo ?? null;
+        if (redirectTo) {
+          login(response.token, mustChange);
+          // Full-page navigation (not wouter's setLocation) is required —
+          // wouter routes are in-memory and can't cross origins.
+          window.location.assign(redirectTo);
+          return;
+        }
         login(response.token, mustChange);
         if (mustChange) {
           setLocation("/change-password");

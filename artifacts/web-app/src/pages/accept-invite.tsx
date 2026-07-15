@@ -57,6 +57,13 @@ export default function AcceptInvitePage() {
       { data: { name: values.name, email, password: values.password, invitationToken: token } },
       {
         onSuccess: (response) => {
+          // Same custom-domain bounce logic as login.tsx.
+          const redirectTo: string | null = (response as any).redirectTo ?? null;
+          if (redirectTo) {
+            login(response.token);
+            window.location.assign(redirectTo);
+            return;
+          }
           login(response.token);
           toast({ title: "Account created", description: "Welcome! Your account is ready." });
           setLocation("/");

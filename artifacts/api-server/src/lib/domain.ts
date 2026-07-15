@@ -8,6 +8,7 @@
  * means the record was observed pointing at us.
  */
 import dns from "node:dns/promises";
+import * as fs from "node:fs";
 
 const HOSTNAME_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i;
 
@@ -17,6 +18,62 @@ export function normalizeDomain(input: string): string {
 
 export function isValidHostname(domain: string): boolean {
   return HOSTNAME_RE.test(domain);
+}
+
+/**
+ * Verified-custom-domain hostnames this API knows about. Sources (in order):
+ *   1. `SYNRA_CUSTOM_DOMAIN_HOSTS` env var (comma-separated, used in tests/Dockerfiles)
+ *   2. `/srv/secrets/syntra-custom-domains` file (one hostname per line, used on VPS)
+ *   3. hard-coded fallback (currently empty — operator must opt-in)
+ *
+ * The list is consumed by Caddy (via the deploy script writing a sidecar
+ * file), the CORS allowlist, and the auth redirect logic, so all three stay
+ * in sync via this single helper.
+ */
+export function getCustomDomainHosts(): string[] {
+  const seen = new Set<string>();
+  const fromEnv = process.env["SYNRA_CUSTOM_DOMAIN_HOSTS"];
+  if (fromEnv) {
+    for (const h of fromEnv.split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (isValidHostname(h)) seen.add(h.toLowerCase());
+    }
+  }
+  // Best-effort read of the VPS-side hostnames file. Kept tolerant so the
+  // helper works during local development (no secrets file present).
+  try {
+    const buf = fs.readFileSync("/srv/secrets/syntra-custom-domains", "utf8");
+    for (const line of buf.split(/\r?\n/)) {
+      const h = line.trim();
+      if (h && !h.startsWith("#") && isValidHostname(h)) seen.add(h.toLowerCase());
+    }
+  } catch {
+    /* file absent or unreadable — fall through */
+  }
+  return Array.from(seen);
+}
+
+/**
+ * True iff `host` is a verified-custom-domain hostname this deployment is
+ * configured to serve. Used by the auth flow to decide whether a post-login
+ * cross-origin redirect is permitted.
+ */
+export function isKnownCustomDomain(host: string): boolean {
+  const norm = normalizeDomain(host);
+  if (!norm) return false;
+  return getCustomDomainHosts().includes(norm);
+}
+
+/**
+ * Build an absolute `https://<host><path>` URL on the verified custom domain,
+ * but ONLY when `host` is in the allowlist returned by `getCustomDomainHosts()`.
+ * Returns `null` for unknown hosts so callers can short-circuit the redirect
+ * (defense against open-redirect: a bogus `customDomain` value in the DB can
+ * never lead to an arbitrary redirect).
+ */
+export function buildCustomDomainUrl(host: string, path = "/"): string | null {
+  if (!isKnownCustomDomain(host)) return null;
+  const safePath = path.startsWith("/") ? path : `/${path}`;
+  return `https://${normalizeDomain(host)}${safePath}`;
 }
 
 /** The platform host(s) a customer's DNS record must resolve to. */
