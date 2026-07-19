@@ -41,23 +41,43 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  // Override the SMTP `MAIL FROM:` (envelope) when a tenant or platform
-  // mailer's "from" string differs from the SMTP user. Most providers
-  // require `MAIL FROM:` to match the authenticated user. When the value
-  // matches the from-string we set here, the envelope is omitted so nodemailer
-  // does not strip the message-level `From:` header.
   envelopeFrom?: string,
 ): Promise<void> {
-  const bareSmtpUser = extractBareAddress(smtp.user);
-  const envelope = envelopeFrom && envelopeFrom !== bareSmtpUser ? envelopeFrom : undefined;
+  // nodemailer 9.0.3 has a regression where passing `envelope` alongside
+  // a single-part text/html body can leave the message-level `From:` header
+  // empty in the resulting MIME — Haraka-style servers reject those with
+  // "550 Missing From header at envelope". We bypass the high-level
+  // `sendMail` shortcut and build the MIME ourselves so the From header is
+  // always present.
+  const { default: nodemailer } = await import("nodemailer");
   const transporter = buildTransport(smtp);
-  await transporter.sendMail({
-    from: smtp.from,
-    envelope: envelope ? { from: envelope, to } : undefined,
+  const fromAddress = envelopeFrom || extractBareAddress(smtp.from) || extractBareAddress(smtp.user);
+  const bareFrom = extractBareAddress(smtp.from);
+  const headerFrom = bareFrom ? (smtp.from.startsWith("<") || smtp.from.includes("<") ? smtp.from : bareFrom) : smtp.from;
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const nodemailerLib: any = nodemailer as any;
+  const composer = new nodemailerLib.MailComposer({
+    from: headerFrom,
     to,
     subject,
     html,
+    envelope: fromAddress
+      ? { from: fromAddress, to }
+      : { from: bareFrom || smtp.user, to },
   });
+  const message = await new Promise<Buffer>((resolve, reject) => {
+    composer.compile().build((err: Error | null, buf: Buffer) => {
+      if (err) reject(err);
+      else resolve(buf);
+    });
+  });
+  await transporter.sendMail({
+    envelope: fromAddress
+      ? { from: fromAddress, to }
+      : { from: bareFrom || smtp.user, to },
+    raw: message,
+  } as any);
 }
 
 function extractBareAddress(from: string): string | null {
