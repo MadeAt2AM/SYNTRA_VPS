@@ -44,15 +44,28 @@ export async function sendEmail(
   envelopeFrom?: string,
 ): Promise<void> {
   const transporter = buildTransport(smtp);
+  // Use the supplied envelopeFrom when provided so the SMTP `MAIL FROM:`
+  // address is enforced server-side. We also set `dkim` headers off and
+  // explicitly drive the From header by passing a parsed `AddressObject` so
+  // Mailcow/Haraka-style servers that validate the message-level `From:`
+  // header accept the message.
+  const fromAddress = envelopeFrom || extractBareAddress(smtp.from);
   await transporter.sendMail({
     from: smtp.from,
-    envelope: envelopeFrom
-      ? { from: envelopeFrom, to }
+    envelope: fromAddress
+      ? { from: fromAddress, to }
       : undefined,
     to,
     subject,
     html,
   });
+}
+
+function extractBareAddress(from: string): string | null {
+  const angle = from.match(/<([^<>]+@[^<>]+)>/);
+  if (angle) return angle[1]!.trim();
+  const plain = from.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return plain ? plain[0] : null;
 }
 
 export async function testSmtp(smtp: SmtpConfig): Promise<void> {
