@@ -28,6 +28,11 @@ function buildTransport(smtp: SmtpConfig) {
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 15_000,
+    // Send the raw SMTP transaction to stdout when SYNTRA_SMTP_DEBUG=1 so
+    // operators can see exactly what nodemailer sent when an upstream rejects
+    // with a confusing 550. Off by default.
+    logger: process.env["SYNTRA_SMTP_DEBUG"] === "1",
+    debug: process.env["SYNTRA_SMTP_DEBUG"] === "1",
   } as any);
 }
 
