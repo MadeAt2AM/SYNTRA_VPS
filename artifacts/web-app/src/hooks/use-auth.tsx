@@ -79,7 +79,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const login = (newToken: string, mustChangePassword?: boolean) => {
-    // Set localStorage immediately so API calls can read the token before the effect fires
+    // Always wipe any previously stored identity-shaped caches before adopting
+    // the new token so a stale platform-admin or prior-tenant session can't
+    // survive into the new user's UI after a fresh login from the same
+    // browser. This protects against the "logged in on customer domain then
+    // landed on /platform" symptom: localStorage keeps the previous user
+    // and React state hydrates with the wrong role until /auth/me resolves.
+    try {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("must_change_password");
+    } catch {
+      /* localStorage unavailable — kept resilient */
+    }
+    queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
     try {
       localStorage.setItem("auth_token", newToken);
     } catch {
