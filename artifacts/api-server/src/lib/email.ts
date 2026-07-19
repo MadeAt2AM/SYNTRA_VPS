@@ -32,13 +32,22 @@ function buildTransport(smtp: SmtpConfig) {
 }
 
 export async function sendEmail(
-  smtp: SmtpConfig,
+  smtp: SmtpConfig & { envelopeFrom?: string },
   to: string,
   subject: string,
   html: string,
+  envelopeFrom?: string,
 ): Promise<void> {
   const transporter = buildTransport(smtp);
-  await transporter.sendMail({ from: smtp.from, to, subject, html });
+  await transporter.sendMail({
+    from: smtp.from,
+    envelope: envelopeFrom
+      ? { from: envelopeFrom, to }
+      : undefined,
+    to,
+    subject,
+    html,
+  });
 }
 
 export async function testSmtp(smtp: SmtpConfig): Promise<void> {

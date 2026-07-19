@@ -471,7 +471,13 @@ router.post("/forgot-password", async (req, res) => {
           `,
         );
         try {
-          await sendEmail(mailer.smtp, user.email, "Reset your SYNTRA platform-admin password", html);
+          await sendEmail(
+            mailer.smtp,
+            user.email,
+            "Reset your SYNTRA platform-admin password",
+            html,
+            mailer.smtp.envelopeFrom,
+          );
         } catch (err) {
           req.log?.warn({ err }, "Failed to send platform-admin password reset email");
         }

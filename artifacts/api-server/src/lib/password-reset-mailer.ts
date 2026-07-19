@@ -30,6 +30,8 @@ export interface ResetMailer {
     user: string;
     pass: string;
     from: string;
+    /** Envelope `MAIL FROM:` — SMTP servers reject emails without an address literal here. */
+    envelopeFrom: string;
   };
   /** Absolute origin used to build the reset link. Always https://<host> */
   origin: string;
@@ -52,6 +54,21 @@ export interface EnvLike {
   CONTACT_EMAIL_FROM?: string | undefined;
 }
 
+/**
+ * Extract a bare email address from a `from` string like
+ * `SYNTRA Platform <platform@madeat2am.in>` so SMTP servers that enforce
+ * envelope-from validation don't reject us. Falls back to the
+ * `contactEmailFrom` and finally an explicit value if no angle-bracket
+ * version is present.
+ */
+function envelopeFrom(from: string, fallback?: string | null): string {
+  const match = from.match(/<([^<>]+@[^<>]+)>/);
+  if (match) return match[1]!.trim();
+  const plain = from.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (plain) return plain[0];
+  return (fallback || from || "").trim();
+}
+
 function readPlatformSmtp(settings: PlatformSmtpRead | null | undefined): {
   host: string;
   port: number;
@@ -59,20 +76,22 @@ function readPlatformSmtp(settings: PlatformSmtpRead | null | undefined): {
   user: string;
   pass: string;
   from: string;
+  envelopeFrom: string;
 } | null {
   const cfg = settings?.smtpConfig as
     | { host?: string; port?: number; secure?: boolean; user?: string; pass?: string; from?: string }
     | null
     | undefined;
   if (cfg && typeof cfg.host === "string" && typeof cfg.user === "string" && typeof cfg.pass === "string" && typeof cfg.from === "string") {
+    const from = settings?.contactEmailFrom || cfg.from;
     return {
       host: cfg.host,
       port: typeof cfg.port === "number" ? cfg.port : 587,
       secure: typeof cfg.secure === "boolean" ? cfg.secure : false,
       user: cfg.user,
       pass: cfg.pass,
-      // Prefer contactEmailFrom if explicitly configured by the platform admin.
-      from: settings?.contactEmailFrom || cfg.from,
+      from,
+      envelopeFrom: envelopeFrom(from, cfg.user),
     };
   }
   return null;
@@ -85,17 +104,20 @@ function readEnvSmtp(env: EnvLike): {
   user: string;
   pass: string;
   from: string;
+  envelopeFrom: string;
 } | null {
   if (!env.CONTACT_SMTP_HOST || !env.CONTACT_SMTP_USER || !env.CONTACT_SMTP_PASS || !env.CONTACT_SMTP_FROM) {
     return null;
   }
+  const from = env.CONTACT_EMAIL_FROM || env.CONTACT_SMTP_FROM;
   return {
     host: env.CONTACT_SMTP_HOST,
     port: env.CONTACT_SMTP_PORT ? Number(env.CONTACT_SMTP_PORT) : 587,
     secure: env.CONTACT_SMTP_SECURE === "true",
     user: env.CONTACT_SMTP_USER,
     pass: env.CONTACT_SMTP_PASS,
-    from: env.CONTACT_EMAIL_FROM || env.CONTACT_SMTP_FROM,
+    from,
+    envelopeFrom: envelopeFrom(from, env.CONTACT_SMTP_USER),
   };
 }
 
