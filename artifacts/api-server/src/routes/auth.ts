@@ -7,10 +7,12 @@ import { eq, sql } from "drizzle-orm";
 import { requireAuth, signToken } from "../middlewares/auth";
 import { sendEmail, SmtpConfig } from "../lib/email";
 import { emailEq, normalizeEmail } from "../lib/email-normalize";
+import { resolveResetMailer } from "../lib/password-reset-mailer";
 import { loginIpLimiter, loginEmailLimiter } from "../middlewares/rate-limit";
 import { renderBrandedEmail } from "../lib/email-templates";
 import { buildCustomDomainUrl, isKnownCustomDomain, normalizeDomain } from "../lib/domain";
 import { isLoginAllowed } from "../lib/login-access";
+import { platformSettings } from "@workspace/db";
 import { z } from "zod";
 
 const router = Router();
@@ -398,7 +400,12 @@ router.post("/forgot-password", async (req, res) => {
       .set({ passwordResetToken: hashedToken, passwordResetExpiry: expiry })
       .where(eq(users.id, user.id));
 
-    // Attempt to send email using the company's SMTP config
+    // Look up the company's SMTP config (for tenant users) and the
+    // platform-admin's SMTP config (for platform admins). Tenant users
+    // receive mail from their own company's SMTP. Platform admins always
+    // receive mail from the platform-level SMTP the operator configures in
+    // /api/platform/settings, with a CONTACT_SMTP_* env-var fallback so a
+    // freshly-deployed system never silently swallows the email.
     if (user.companyId) {
       const [company] = await db
         .select({ name: companies.name, smtpConfig: companies.smtpConfig, logoUrl: companies.logoUrl, logoText: companies.logoText })
@@ -428,6 +435,48 @@ router.post("/forgot-password", async (req, res) => {
         } catch (err) {
           req.log?.warn({ err }, "Failed to send password reset email");
         }
+      }
+    } else {
+      // Platform-admin branch: SMTP is owned by the platform operator and
+      // configured under /api/platform/settings. We use the platform SMTP
+      // when configured, falling back to the CONTACT_SMTP_* env vars so a
+      // freshly-deployed system never silently swallows the email.
+      const [settings] = await db
+        .select()
+        .from(platformSettings)
+        .where(eq(platformSettings.id, 1))
+        .limit(1);
+      const mailer = resolveResetMailer({
+        userRole: user.role,
+        userCompanyId: user.companyId,
+        platformSettings: settings ?? null,
+        env: process.env,
+      });
+
+      if (mailer.kind === "platform" && mailer.smtp) {
+        const resetUrl = `${mailer.origin}/reset-password?token=${rawToken}`;
+        const brandName =
+          (settings?.contactEmailFrom && !settings.contactEmailFrom.includes("<"))
+            ? settings.contactEmailFrom
+            : "SYNTRA Platform";
+        const html = renderBrandedEmail(
+          { name: brandName },
+          `
+          <p style="color:#444;font-size:15px;line-height:1.6;margin:0 0 16px;">Hi ${user.name},</p>
+          <p style="color:#444;font-size:15px;line-height:1.6;margin:0 0 24px;">You requested a password reset for your <strong>SYNTRA platform admin</strong> account.</p>
+          <div style="text-align:center;margin:0 0 24px;">
+            <a href="${resetUrl}" style="background:#e11d48;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">Reset Password</a>
+          </div>
+          <p style="color:#888;font-size:13px;line-height:1.6;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+          `,
+        );
+        try {
+          await sendEmail(mailer.smtp, user.email, "Reset your SYNTRA platform-admin password", html);
+        } catch (err) {
+          req.log?.warn({ err }, "Failed to send platform-admin password reset email");
+        }
+      } else {
+        req.log?.warn({ email: user.email }, "platform-admin reset: no SMTP configured; token stored but no email sent");
       }
     }
   }
