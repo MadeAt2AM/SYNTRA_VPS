@@ -41,20 +41,19 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
+  // Override the SMTP `MAIL FROM:` (envelope) when a tenant or platform
+  // mailer's "from" string differs from the SMTP user. Most providers
+  // require `MAIL FROM:` to match the authenticated user. When the value
+  // matches the from-string we set here, the envelope is omitted so nodemailer
+  // does not strip the message-level `From:` header.
   envelopeFrom?: string,
 ): Promise<void> {
+  const bareSmtpUser = extractBareAddress(smtp.user);
+  const envelope = envelopeFrom && envelopeFrom !== bareSmtpUser ? envelopeFrom : undefined;
   const transporter = buildTransport(smtp);
-  // Use the supplied envelopeFrom when provided so the SMTP `MAIL FROM:`
-  // address is enforced server-side. We also set `dkim` headers off and
-  // explicitly drive the From header by passing a parsed `AddressObject` so
-  // Mailcow/Haraka-style servers that validate the message-level `From:`
-  // header accept the message.
-  const fromAddress = envelopeFrom || extractBareAddress(smtp.from);
   await transporter.sendMail({
     from: smtp.from,
-    envelope: fromAddress
-      ? { from: fromAddress, to }
-      : undefined,
+    envelope: envelope ? { from: envelope, to } : undefined,
     to,
     subject,
     html,
