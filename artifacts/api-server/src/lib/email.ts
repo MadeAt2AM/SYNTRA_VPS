@@ -52,7 +52,7 @@ export async function sendEmail(
   // MailComposer is not re-exported from the top-level module in
   // nodemailer 9 — pull it from the internal path.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const MailComposer = (await import("nodemailer/lib/mail-composer" as string)).default;
+  const MailComposer = (await import("nodemailer/lib/mail-composer/index.js" as string)).default;
 
   const transporter = buildTransport(smtp);
   const fromAddress =
