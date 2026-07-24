@@ -49,22 +49,25 @@ export async function sendEmail(
   // "550 Missing From header at envelope". We bypass the high-level
   // `sendMail` shortcut and build the MIME ourselves so the From header is
   // always present.
-  const { default: nodemailer } = await import("nodemailer");
-  const transporter = buildTransport(smtp);
-  const fromAddress = envelopeFrom || extractBareAddress(smtp.from) || extractBareAddress(smtp.user);
-  const bareFrom = extractBareAddress(smtp.from);
-  const headerFrom = bareFrom ? (smtp.from.startsWith("<") || smtp.from.includes("<") ? smtp.from : bareFrom) : smtp.from;
-
+  // MailComposer is not re-exported from the top-level module in
+  // nodemailer 9 — pull it from the internal path.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodemailerLib: any = nodemailer as any;
-  const composer = new nodemailerLib.MailComposer({
-    from: headerFrom,
+  const MailComposer = (await import("nodemailer/lib/mail-composer" as string)).default;
+
+  const transporter = buildTransport(smtp);
+  const fromAddress =
+    envelopeFrom || extractBareAddress(smtp.from) || extractBareAddress(smtp.user);
+  const bareFrom = extractBareAddress(smtp.from);
+
+  const composer = new MailComposer({
+    from: smtp.from,
     to,
     subject,
     html,
-    envelope: fromAddress
-      ? { from: fromAddress, to }
-      : { from: bareFrom || smtp.user, to },
+    envelope: {
+      from: fromAddress || bareFrom || smtp.user,
+      to,
+    },
   });
   const message = await new Promise<Buffer>((resolve, reject) => {
     composer.compile().build((err: Error | null, buf: Buffer) => {
@@ -73,9 +76,10 @@ export async function sendEmail(
     });
   });
   await transporter.sendMail({
-    envelope: fromAddress
-      ? { from: fromAddress, to }
-      : { from: bareFrom || smtp.user, to },
+    envelope: {
+      from: fromAddress || bareFrom || smtp.user,
+      to,
+    },
     raw: message,
   } as any);
 }
