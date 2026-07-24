@@ -34,7 +34,7 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:20-alpine AS deps
 WORKDIR /runtime
 # Install only the runtime packages that were excluded from the bundle
-RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"dependencies":{"nodemailer":"^9.0.3"}}' > package.json \
+RUN echo '{"name":"syntra-api-runtime","version":"1.0.0","private":true,"dependencies":{"nodemailer":"^6.9.16"}}' > package.json \
     && npm install --production --no-fund --no-audit
 
 # ─── Stage 3: Final runtime image ─────────────────────────────────────────────
