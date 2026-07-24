@@ -41,47 +41,20 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
+  // Override the SMTP `MAIL FROM:` (envelope) when a tenant or platform
+  // mailer's "from" string differs from the SMTP user. Most providers
+  // require `MAIL FROM:` to match the authenticated user.
   envelopeFrom?: string,
 ): Promise<void> {
-  // nodemailer 9.0.3 has a regression where passing `envelope` alongside
-  // a single-part text/html body can leave the message-level `From:` header
-  // empty in the resulting MIME — Haraka-style servers reject those with
-  // "550 Missing From header at envelope". We bypass the high-level
-  // `sendMail` shortcut and build the MIME ourselves so the From header is
-  // always present.
-  // MailComposer is not re-exported from the top-level module in
-  // nodemailer 9 — pull it from the internal path.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const MailComposer = (await import("nodemailer/lib/mail-composer/index.js" as string)).default;
-
   const transporter = buildTransport(smtp);
-  const fromAddress =
-    envelopeFrom || extractBareAddress(smtp.from) || extractBareAddress(smtp.user);
-  const bareFrom = extractBareAddress(smtp.from);
-
-  const composer = new MailComposer({
+  const fromAddress = envelopeFrom || extractBareAddress(smtp.from);
+  await transporter.sendMail({
     from: smtp.from,
+    envelope: fromAddress ? { from: fromAddress, to } : undefined,
     to,
     subject,
     html,
-    envelope: {
-      from: fromAddress || bareFrom || smtp.user,
-      to,
-    },
   });
-  const message = await new Promise<Buffer>((resolve, reject) => {
-    composer.compile().build((err: Error | null, buf: Buffer) => {
-      if (err) reject(err);
-      else resolve(buf);
-    });
-  });
-  await transporter.sendMail({
-    envelope: {
-      from: fromAddress || bareFrom || smtp.user,
-      to,
-    },
-    raw: message,
-  } as any);
 }
 
 function extractBareAddress(from: string): string | null {
